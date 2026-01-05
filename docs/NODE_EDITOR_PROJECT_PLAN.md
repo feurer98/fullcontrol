@@ -1,0 +1,1919 @@
+# Node-Editor für 3D-Druck: Projektplan & Analyse
+
+> **Ziel**: Visueller Node-Editor zur Erstellung von 3MF-Dateien mit eingebettetem G-Code für Bambu Lab 3D-Drucker
+> **Output-Format**: `.gcode.3mf` (Bambu Lab Standard)
+> **Geschätzte Gesamtdauer**: ~74 Stunden (37 Tasks)
+
+---
+
+## 1. Codebase-Inventar
+
+### 1.1 Struktur-Übersicht
+
+```
+fullcontrol/
+├── fullcontrol/                    # Haupt-Python-Paket (Core Library)
+│   ├── gcode/                      # G-Code Generierung (9 Dateien, ~600 LOC)
+│   │   ├── point.py                # Point mit XYZ_gcode(), gcode() Methoden
+│   │   ├── extrusion_classes.py    # Extruder, ExtrusionGeometry, StationaryExtrusion
+│   │   ├── printer.py              # Printer State, F-Code Generierung
+│   │   ├── commands.py             # ManualGcode, PrinterCommand
+│   │   ├── controls.py             # GcodeControls Konfiguration
+│   │   ├── state.py                # State-Machine für G-Code Generierung
+│   │   ├── steps2gcode.py          # Pipeline: Steps → G-Code
+│   │   └── primer_library/         # 8 Primer-Routinen
+│   │
+│   ├── visualize/                  # 3D-Visualisierung (13 Dateien, ~1400 LOC)
+│   │   ├── plotly.py               # Plotly-basierte Rendering
+│   │   ├── tube_mesh.py            # Mesh-Generierung (824 LOC - größte Datei)
+│   │   └── ...
+│   │
+│   ├── geometry/                   # Geometrie-Funktionen (15 Module)
+│   │   ├── shapes.py               # rectangleXY, circleXY, ellipseXY, polygonXY, spiralXY, helixZ
+│   │   ├── arcs.py                 # arcXY, variable_arcXY, elliptical_arcXY
+│   │   ├── waves.py                # squarewaveXY, trianglewaveXYpolar, sinewaveXYpolar
+│   │   ├── move.py / reflect.py    # Transformationen
+│   │   └── ...
+│   │
+│   ├── devices/                    # Drucker-Definitionen (19 Geräte)
+│   │   ├── community/singletool/   # Prozedur-basiert (inkl. bambulab_x1)
+│   │   ├── community_minimal/      # String-basierte Templates
+│   │   └── cura/                   # Cura-extrahierte Profile
+│   │
+│   ├── combinations/               # Unified API (gcode + visualize)
+│   ├── point.py                    # Basis Point(x, y, z)
+│   ├── base.py                     # BaseModelPlus (Pydantic)
+│   └── extrusion_classes.py        # Basis Extrusion-Klassen
+│
+├── lab/fullcontrol/                # Experimentelle Features
+│   ├── controlcode_formats/        # 3MF/Bambu Lab Support ⭐
+│   │   ├── steps2controlcode.py    # gcode_to_bambu_3mf()
+│   │   └── FC_bambulab_template.3mf # Template-Archiv
+│   ├── multiaxis/                  # 5-Achsen Druck
+│   └── laser/                      # Laser-Schneiden
+│
+├── tests/                          # Test-Suite
+├── tutorials/                      # Jupyter Notebooks
+└── models/                         # Beispiel-Designs
+```
+
+### 1.2 Dependencies
+
+```toml
+# pyproject.toml
+requires-python = ">=3.10"
+dependencies = [
+    "plotly",      # 3D-Visualisierung
+    "pydantic",    # Datenvalidierung
+    "numpy",       # Numerische Berechnungen
+]
+```
+
+### 1.3 Entry Points
+
+| Entry Point | Pfad | Beschreibung |
+|-------------|------|--------------|
+| Main API | `fullcontrol/__init__.py` | Importiert von `combinations/gcode_and_visualize/common` |
+| G-Code Generation | `fullcontrol/gcode/steps2gcode.py` | `gcode(steps, controls, show_tips)` |
+| Visualization | `fullcontrol/visualize/steps2visualization.py` | `visualize(steps, controls, show_tips)` |
+| 3MF Export | `lab/fullcontrol/controlcode_formats/steps2controlcode.py` | `gcode_to_bambu_3mf(gcode, filename)` |
+| Transform | `fullcontrol/combinations/.../common.py` | `transform(steps, 'gcode'/'plot', controls)` |
+
+---
+
+## 2. Wiederverwendbarkeits-Matrix
+
+| Komponente | Status | Migrations-aufwand | Aktion |
+|------------|--------|-------------------|--------|
+| **G-Code Commands** | ✅ Vorhanden | 2h | `ManualGcode`, `PrinterCommand` direkt nutzbar |
+| **Point/Koordinaten** | ✅ Vorhanden | 1h | `Point(x,y,z)` mit Pydantic-Validierung |
+| **Extruder State** | ✅ Vorhanden | 2h | Umfangreiche E-Achsen-Berechnung, Volumen-Tracking |
+| **Temperatur-Kontrolle** | ✅ Vorhanden | 1h | `Hotend`, `Buildplate`, `Fan` Klassen |
+| **Geometrie-Funktionen** | ✅ Vorhanden | 4h | 15 Module, Shapes/Arcs/Waves/Transforms |
+| **Drucker-Profile** | ✅ Vorhanden | 2h | 19 Geräte inkl. `bambulab_x1` |
+| **3MF Template** | 🔧 Anpassung | 8h | Nur Template-basiert, keine Production Extension |
+| **Visualisierung** | ✅ Vorhanden | 6h | Plotly → Three.js Migration nötig |
+| **State Machine** | ✅ Vorhanden | 4h | Adaptierung für Node-basierte Ausführung |
+| **Node Graph System** | 🆕 Neu | 16h | Komplett neu zu entwickeln |
+| **Reactive Updates** | 🆕 Neu | 12h | Komplett neu zu entwickeln |
+| **WASM/Bridge** | 🆕 Neu | 10h | Komplett neu zu entwickeln |
+| **Frontend UI** | 🆕 Neu | 24h | React + ReactFlow |
+
+**Legende**: ✅ Direkt nutzbar | 🔧 Anpassung nötig | 🆕 Neu zu entwickeln
+
+---
+
+## 3. Gap-Analyse
+
+### 3.1 Fehlende Komponenten
+
+| Komponente | Priorität | Beschreibung |
+|------------|-----------|--------------|
+| ❌ **3MF Production Extension** | Hoch | UUID auf build/item/object, path-Attribute fehlen |
+| ❌ **UUID Generation (RFC 4122)** | Hoch | Für Production Extension benötigt |
+| ❌ **lib3mf Integration** | Mittel | Aktuell nur ZIP-Manipulation, keine offizielle API |
+| ❌ **Node Graph System** | Kritisch | Kernkomponente fehlt komplett |
+| ❌ **Reactive Update Pipeline** | Hoch | Live-Preview benötigt reaktive Datenflüsse |
+| ❌ **WASM Compilation** | Mittel | Falls Rust-Path gewählt wird |
+| ❌ **WebSocket Server** | Mittel | Falls Python-Path gewählt wird |
+| ❌ **Three.js Integration** | Hoch | Plotly nicht geeignet für Live-Updates |
+| ❌ **Frontend (React/ReactFlow)** | Kritisch | UI komplett neu |
+
+### 3.2 Bestehende 3MF-Implementierung - Limitierungen
+
+**Aktuelle Implementierung** (`lab/fullcontrol/controlcode_formats/steps2controlcode.py`):
+
+```python
+def gcode_to_bambu_3mf(gcode: str, new_3mf_file: str):
+    # 1. Template extrahieren (ZIP)
+    # 2. Placeholder "; [FULLCONTROL GCODE HERE]" ersetzen
+    # 3. Neu verpacken
+```
+
+**Probleme**:
+1. ❌ Keine dynamische 3dmodel.model Generierung
+2. ❌ Keine UUID-Unterstützung (Production Extension)
+3. ❌ Nur `bambulab_x1` unterstützt
+4. ❌ Keine Thumbnail-Generierung
+5. ❌ Keine Multi-Plate Unterstützung
+6. ❌ Keine AMS-Integration
+
+**Aktuelles 3MF Template** (`FC_bambulab_template.3mf`):
+```xml
+<model xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06">
+  <resources/>  <!-- LEER - keine Objects -->
+  <build/>      <!-- LEER - keine Items -->
+</model>
+```
+
+---
+
+## 4. Tech-Stack Entscheidungsempfehlung
+
+### 4.1 Vergleichsmatrix
+
+| Kriterium | Rust + WASM | Python + WebSocket | Gewinner |
+|-----------|-------------|-------------------|----------|
+| **Performance** | ⭐⭐⭐⭐⭐ Native Speed | ⭐⭐⭐ Gut für Prototyp | Rust |
+| **Entwicklungszeit** | ⭐⭐ Steile Lernkurve | ⭐⭐⭐⭐⭐ Schnelle Iteration | Python |
+| **Code-Wiederverwendung** | ⭐⭐ Port von Python | ⭐⭐⭐⭐⭐ Direkte Nutzung | Python |
+| **App-Größe** | ⭐⭐⭐⭐⭐ ~10MB (Tauri) | ⭐⭐ ~150MB (Electron) | Rust |
+| **lib3mf Bindings** | ⭐⭐⭐⭐ lib3mf-rs | ⭐⭐⭐⭐ lib3mf Python | Gleich |
+| **Browser-Support** | ⭐⭐⭐⭐⭐ Direkt via WASM | ⭐⭐⭐ Server nötig | Rust |
+| **Debugging** | ⭐⭐⭐ Komplex | ⭐⭐⭐⭐⭐ Einfach | Python |
+| **Ecosystem** | ⭐⭐⭐⭐ Wachsend | ⭐⭐⭐⭐⭐ Etabliert | Python |
+
+### 4.2 Empfehlung: **Hybrid-Ansatz**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EMPFOHLENER TECH-STACK                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Phase 1-7 (MVP):     Python + WebSocket + Electron              │
+│  ──────────────────────────────────────────────────────────────  │
+│  • Schnelle Entwicklung durch FullControl-Wiederverwendung       │
+│  • Direkte Integration bestehender G-Code/Geometrie-Module       │
+│  • lib3mf Python Bindings für 3MF Production Extension           │
+│  • FastAPI/WebSocket für Frontend-Kommunikation                  │
+│                                                                  │
+│  Phase 8+ (Optimierung): Rust WASM + Tauri (Optional)           │
+│  ──────────────────────────────────────────────────────────────  │
+│  • Performance-kritische Teile nach WASM portieren               │
+│  • Tauri für kleinere Desktop-App                                │
+│  • Nur wenn Performance-Bottlenecks identifiziert                │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Begründung**:
+1. FullControl ist bereits in Python → direkte Wiederverwendung
+2. MVP schneller erreichbar (geschätzt 40% Zeitersparnis)
+3. Risiko-Minimierung durch bewährte Codebasis
+4. Rust-Migration kann später erfolgen, wenn Performance-Daten vorliegen
+
+---
+
+## 5. Architektur-Übersicht
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        React Frontend                                │
+│  ┌──────────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │   Node Editor    │  │    State     │  │     3D Preview        │  │
+│  │   (ReactFlow)    │→→│  (Zustand)   │→→│     (Three.js)        │  │
+│  │                  │  │              │  │                       │  │
+│  │ • Node Types     │  │ • Node Graph │  │ • Toolpath Lines      │  │
+│  │ • Connections    │  │ • Parameters │  │ • Build Volume        │  │
+│  │ • Properties     │  │ • G-Code     │  │ • Layer Slider        │  │
+│  │ • Validation     │  │ • Preview    │  │ • Real-time Update    │  │
+│  └──────────────────┘  └──────┬───────┘  └───────────────────────┘  │
+└───────────────────────────────│──────────────────────────────────────┘
+                                │ WebSocket (JSON-RPC)
+┌───────────────────────────────│──────────────────────────────────────┐
+│                    Python Backend (FastAPI)                          │
+│  ┌──────────────────┐  ┌──────┴───────┐  ┌───────────────────────┐  │
+│  │   Node Graph     │  │   G-Code     │  │     3MF Builder       │  │
+│  │   Processor      │→→│   Generator  │→→│     (lib3mf)          │  │
+│  │                  │  │              │  │                       │  │
+│  │ • Topological    │  │ • FullControl│  │ • Production Ext.     │  │
+│  │   Sort           │  │   Integration│  │ • UUID (RFC 4122)     │  │
+│  │ • Validation     │  │ • State Mgmt │  │ • Multi-Plate         │  │
+│  │ • Cycle Check    │  │ • Toolpaths  │  │ • Thumbnails          │  │
+│  └──────────────────┘  └──────────────┘  └───────────────────────┘  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                   FullControl Core (Existing)                 │   │
+│  │  • Point, Extruder, Printer, Fan, Hotend, Buildplate         │   │
+│  │  • Geometry: shapes, arcs, waves, transforms                  │   │
+│  │  • Devices: bambulab_x1, prusa_mk4, generic, ...             │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 6. Phasen-Übersicht
+
+| Phase | Name | Tasks | Stunden | Abhängigkeit | Risiko |
+|-------|------|-------|---------|--------------|--------|
+| 1 | Projekt-Setup | 3 | 6h | - | Niedrig |
+| 2 | Core: 3MF Engine | 5 | 10h | Phase 1 | Mittel |
+| 3 | Core: G-Code Generator | 4 | 8h | Phase 2 | Niedrig |
+| 4 | Frontend: Node-Editor | 5 | 10h | Phase 1 | Mittel |
+| 5 | Frontend: 3D-Preview | 4 | 8h | Phase 4 | Mittel |
+| 6 | Integration: WebSocket Bridge | 3 | 6h | Phase 3, 4 | Hoch |
+| 7 | Live-Update System | 3 | 6h | Phase 5, 6 | Hoch |
+| 8 | 3MF Export Pipeline | 3 | 6h | Phase 7 | Mittel |
+| 9 | Electron Shell | 3 | 6h | Phase 8 | Niedrig |
+| 10 | Testing & Polish | 4 | 8h | Phase 9 | Niedrig |
+| **Gesamt** | | **37** | **74h** | | |
+
+---
+
+## 7. Detaillierte Task-Planung
+
+---
+
+### Phase 1: Projekt-Setup
+**Dauer**: 3 Tasks (6h) | **Risiko**: Niedrig | **Abhängig von**: -
+
+#### Task 1.1: Monorepo-Struktur erstellen
+**Ziel**: Projektstruktur für Frontend + Backend aufsetzen
+
+**Deliverable**:
+- [ ] Monorepo mit pnpm workspaces
+- [ ] Python Backend Projektstruktur
+- [ ] React Frontend Projektstruktur
+
+**Abhängigkeiten**: Keine
+
+**Definition of Done**:
+- [ ] `pnpm install` läuft fehlerfrei
+- [ ] `pip install -e .` für Backend funktioniert
+- [ ] Dev-Server startet für Frontend
+
+**Technische Schritte**:
+1. Erstelle Monorepo-Struktur:
+   ```
+   node-slicer/
+   ├── packages/
+   │   ├── frontend/          # React + Vite
+   │   ├── backend/           # FastAPI
+   │   └── shared/            # Shared Types
+   ├── pnpm-workspace.yaml
+   └── package.json
+   ```
+2. Initialisiere React-Projekt mit Vite + TypeScript
+3. Initialisiere FastAPI-Projekt mit Poetry/pip
+4. Konfiguriere ESLint, Prettier, Black, Ruff
+
+**Risiken**: Keine
+
+---
+
+#### Task 1.2: Dependency-Installation
+**Ziel**: Alle benötigten Pakete installieren und konfigurieren
+
+**Deliverable**:
+- [ ] Frontend: React, ReactFlow, Three.js, Zustand
+- [ ] Backend: FastAPI, WebSockets, lib3mf, FullControl
+
+**Abhängigkeiten**: Task 1.1
+
+**Definition of Done**:
+- [ ] Import-Tests für alle Hauptmodule erfolgreich
+- [ ] lib3mf Python Bindings funktionieren
+- [ ] FullControl als lokale Dependency eingebunden
+
+**Technische Schritte**:
+1. Frontend Dependencies:
+   ```bash
+   pnpm add react-flow-renderer @react-three/fiber @react-three/drei zustand
+   pnpm add -D @types/three typescript vite
+   ```
+2. Backend Dependencies:
+   ```bash
+   pip install fastapi uvicorn websockets lib3mf
+   pip install -e /path/to/fullcontrol  # Local install
+   ```
+3. Erstelle Smoke-Tests für kritische Imports
+
+**Risiken**: lib3mf Installation kann auf manchen Plattformen problematisch sein
+
+---
+
+#### Task 1.3: Dev-Environment & CI Setup
+**Ziel**: Entwicklungsumgebung und CI/CD Pipeline
+
+**Deliverable**:
+- [ ] Docker-Compose für lokale Entwicklung
+- [ ] GitHub Actions Workflow
+- [ ] Pre-commit Hooks
+
+**Abhängigkeiten**: Task 1.2
+
+**Definition of Done**:
+- [ ] `docker-compose up` startet Frontend + Backend
+- [ ] CI läuft bei Push
+- [ ] Pre-commit Hooks validieren Code
+
+**Technische Schritte**:
+1. Erstelle `docker-compose.yml` mit:
+   - Frontend Dev-Server (Port 5173)
+   - Backend Server (Port 8000)
+   - Hot-Reload für beide
+2. Erstelle `.github/workflows/ci.yml`
+3. Konfiguriere Husky + lint-staged
+
+**Risiken**: Keine
+
+---
+
+### Phase 2: Core: 3MF Engine
+**Dauer**: 5 Tasks (10h) | **Risiko**: Mittel | **Abhängig von**: Phase 1
+
+#### Task 2.1: lib3mf Wrapper-Klasse
+**Ziel**: Python-Wrapper für lib3mf mit typsicherer API
+
+**Deliverable**:
+- [ ] `ThreeMFBuilder` Klasse
+- [ ] Methoden für Model, Build, Resources
+
+**Abhängigkeiten**: Task 1.2
+
+**Definition of Done**:
+- [ ] Kann leeres 3MF erstellen und speichern
+- [ ] Bambu Studio kann Datei öffnen
+- [ ] Unit-Tests für Basis-Funktionen
+
+**Technische Schritte**:
+1. Erstelle `backend/core/threemf_builder.py`:
+   ```python
+   class ThreeMFBuilder:
+       def __init__(self):
+           self.wrapper = lib3mf.get_wrapper()
+           self.model = self.wrapper.CreateModel()
+
+       def add_metadata(self, name: str, value: str): ...
+       def create_mesh_object(self, vertices, triangles): ...
+       def add_to_build(self, object_id, transform): ...
+       def save(self, path: str): ...
+   ```
+2. Implementiere Basis-Methoden
+3. Schreibe Unit-Tests
+
+**Risiken**: lib3mf API-Dokumentation teilweise unvollständig
+
+---
+
+#### Task 2.2: Production Extension Support
+**Ziel**: 3MF Production Extension (UUIDs) implementieren
+
+**Deliverable**:
+- [ ] UUID-Generierung (RFC 4122)
+- [ ] Production Extension Namespace
+- [ ] UUID auf build, item, object, component
+
+**Abhängigkeiten**: Task 2.1
+
+**Definition of Done**:
+- [ ] Generierte 3MF enthält valide UUIDs
+- [ ] Production Extension Schema validiert
+- [ ] Bambu Studio erkennt UUIDs
+
+**Technische Schritte**:
+1. Erweitere `ThreeMFBuilder`:
+   ```python
+   import uuid
+
+   def add_production_extension(self):
+       # xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
+       self.model.SetExtensionNamespace(
+           "http://schemas.microsoft.com/3dmanufacturing/production/2015/06", "p"
+       )
+
+   def generate_uuid(self) -> str:
+       return str(uuid.uuid4())
+
+   def set_object_uuid(self, object_id: int, obj_uuid: str): ...
+   ```
+2. Implementiere UUID-Tracking für alle Elemente
+3. Validiere gegen 3MF Production Extension Schema
+
+**Risiken**: lib3mf Production Extension API muss verifiziert werden
+
+---
+
+#### Task 2.3: Metadata & Config Integration
+**Ziel**: Bambu Lab spezifische Metadata-Strukturen
+
+**Deliverable**:
+- [ ] `model_settings.config` Generator
+- [ ] `project_settings.config` Generator
+- [ ] `slice_info.config` Generator
+
+**Abhängigkeiten**: Task 2.2
+
+**Definition of Done**:
+- [ ] Konfigurationsdateien werden korrekt generiert
+- [ ] Bambu Studio lädt Einstellungen
+- [ ] Drucker-spezifische Presets funktionieren
+
+**Technische Schritte**:
+1. Analysiere Bambu Lab Config-Formate aus Template
+2. Erstelle `BambuConfigGenerator` Klasse:
+   ```python
+   class BambuConfigGenerator:
+       def generate_model_settings(self, objects: List[ObjectSettings]) -> str: ...
+       def generate_project_settings(self, printer: str, filament: str) -> str: ...
+       def generate_slice_info(self, layers: int, time: float) -> str: ...
+   ```
+3. Implementiere Template-basierte Generierung
+
+**Risiken**: Undokumentierte Bambu Lab Formate
+
+---
+
+#### Task 2.4: G-Code Embedding
+**Ziel**: G-Code in 3MF einbetten (Metadata/plate_X.gcode)
+
+**Deliverable**:
+- [ ] G-Code Packaging-Funktion
+- [ ] Multi-Plate Support Vorbereitung
+- [ ] MD5-Checksummen
+
+**Abhängigkeiten**: Task 2.3
+
+**Definition of Done**:
+- [ ] G-Code wird korrekt in 3MF eingebettet
+- [ ] Bambu Studio zeigt G-Code Preview
+- [ ] MD5-Checksumme validiert
+
+**Technische Schritte**:
+1. Erweitere `ThreeMFBuilder`:
+   ```python
+   def embed_gcode(self, gcode: str, plate: int = 1):
+       attachment = self.model.AddAttachment(
+           f"/Metadata/plate_{plate}.gcode",
+           "application/x-gcode"
+       )
+       attachment.ReadFromBuffer(gcode.encode('utf-8'))
+
+       # MD5 Checksum
+       md5_hash = hashlib.md5(gcode.encode()).hexdigest()
+       self.model.AddAttachment(
+           f"/Metadata/plate_{plate}.gcode.md5",
+           "text/plain"
+       ).ReadFromBuffer(md5_hash.encode())
+   ```
+2. Teste mit verschiedenen G-Code Größen
+
+**Risiken**: Keine
+
+---
+
+#### Task 2.5: Thumbnail-Generierung
+**Ziel**: PNG-Thumbnails für 3MF-Preview
+
+**Deliverable**:
+- [ ] Thumbnail-Renderer (PNG)
+- [ ] Verschiedene Größen (plate_X.png, plate_X_small.png)
+- [ ] Plate-Übersicht (pick_X.png)
+
+**Abhängigkeiten**: Task 2.4
+
+**Definition of Done**:
+- [ ] Thumbnails werden generiert
+- [ ] Bambu Studio zeigt Vorschau
+- [ ] Korrektes Seitenverhältnis
+
+**Technische Schritte**:
+1. Option A: Server-side Rendering mit Pillow
+2. Option B: Three.js Screenshot vom Frontend
+3. Implementiere `ThumbnailGenerator`:
+   ```python
+   from PIL import Image, ImageDraw
+
+   class ThumbnailGenerator:
+       def render_toolpath_thumbnail(self, toolpath: List[Point], size=(256, 256)) -> bytes:
+           img = Image.new('RGBA', size, (255, 255, 255, 0))
+           draw = ImageDraw.Draw(img)
+           # Zeichne Toolpath-Projektion
+           ...
+           return img.tobytes('png')
+   ```
+
+**Risiken**: Qualität der Server-side Thumbnails
+
+---
+
+### Phase 3: Core: G-Code Generator
+**Dauer**: 4 Tasks (8h) | **Risiko**: Niedrig | **Abhängig von**: Phase 2
+
+#### Task 3.1: Node-basierter G-Code Adapter
+**Ziel**: FullControl-Integration für Node-basierte Ausführung
+
+**Deliverable**:
+- [ ] Node → FullControl Steps Konverter
+- [ ] Bidirektionales Mapping
+
+**Abhängigkeiten**: Task 2.1
+
+**Definition of Done**:
+- [ ] Nodes werden korrekt zu Steps konvertiert
+- [ ] Bestehende FullControl-Funktionen nutzbar
+- [ ] Unit-Tests für alle Node-Typen
+
+**Technische Schritte**:
+1. Erstelle `NodeToStepsConverter`:
+   ```python
+   class NodeToStepsConverter:
+       def convert(self, node_graph: NodeGraph) -> List[Any]:
+           """Konvertiert Node-Graph zu FullControl Steps"""
+           ordered_nodes = self.topological_sort(node_graph)
+           steps = []
+           for node in ordered_nodes:
+               steps.extend(self.node_to_steps(node))
+           return steps
+
+       def node_to_steps(self, node: Node) -> List[Any]:
+           match node.type:
+               case "LinearMove":
+                   return [fc.Point(x=node.params.x, y=node.params.y, z=node.params.z)]
+               case "ExtrudeMove":
+                   return [fc.Extruder(on=True), fc.Point(...)]
+               # ...
+   ```
+
+**Risiken**: Keine (FullControl API gut dokumentiert)
+
+---
+
+#### Task 3.2: MVP Node-Definitionen
+**Ziel**: Basis Node-Typen implementieren
+
+**Deliverable**:
+- [ ] 12 MVP Node-Typen (siehe Spezifikation)
+- [ ] Node-Registry System
+
+**Abhängigkeiten**: Task 3.1
+
+**Definition of Done**:
+- [ ] Alle MVP-Nodes implementiert
+- [ ] G-Code Output korrekt
+- [ ] Validierung funktioniert
+
+**Technische Schritte**:
+1. Implementiere Node-Definitionen:
+   ```python
+   @dataclass
+   class NodeDefinition:
+       id: str
+       category: NodeCategory
+       inputs: List[PortDefinition]
+       outputs: List[PortDefinition]
+       parameters: List[ParameterDefinition]
+
+       def validate(self, params, inputs) -> ValidationResult: ...
+       def to_steps(self, params, inputs) -> List[Any]: ...
+
+   # Registry
+   NODE_REGISTRY = {
+       "Start": StartNode(),
+       "Home": HomeNode(),
+       "LinearMove": LinearMoveNode(),
+       "ExtrudeMove": ExtrudeMoveNode(),
+       "SetHotend": SetHotendNode(),
+       "WaitHotend": WaitHotendNode(),
+       "SetBed": SetBedNode(),
+       "WaitBed": WaitBedNode(),
+       "SetFan": SetFanNode(),
+       "Sequence": SequenceNode(),
+       "Loop": LoopNode(),
+       "End": EndNode(),
+   }
+   ```
+2. Implementiere jeden Node-Typ
+
+**Risiken**: Keine
+
+---
+
+#### Task 3.3: Graph Validation & Execution
+**Ziel**: Graph-Validierung und Ausführungs-Engine
+
+**Deliverable**:
+- [ ] Topologische Sortierung
+- [ ] Zyklus-Erkennung
+- [ ] Connection-Validierung
+
+**Abhängigkeiten**: Task 3.2
+
+**Definition of Done**:
+- [ ] Zyklen werden erkannt und gemeldet
+- [ ] Ungültige Verbindungen blockiert
+- [ ] Ausführungsreihenfolge korrekt
+
+**Technische Schritte**:
+1. Implementiere Graph-Utilities:
+   ```python
+   class GraphProcessor:
+       def topological_sort(self, graph: NodeGraph) -> List[Node]:
+           """Kahn's Algorithm"""
+           ...
+
+       def detect_cycles(self, graph: NodeGraph) -> List[List[str]]:
+           """DFS-basierte Zyklus-Erkennung"""
+           ...
+
+       def validate_connections(self, graph: NodeGraph) -> List[ValidationError]:
+           """Typ-Kompatibilität prüfen"""
+           ...
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 3.4: Bambu Lab G-Code Optimierungen
+**Ziel**: Bambu Lab spezifische G-Code Features
+
+**Deliverable**:
+- [ ] Bambu Lab Header/Footer
+- [ ] AMS-Vorbereitung (T-Codes)
+- [ ] Spezielle M-Codes (M400, M73, etc.)
+
+**Abhängigkeiten**: Task 3.3
+
+**Definition of Done**:
+- [ ] G-Code läuft auf Bambu Lab Druckern
+- [ ] Progress-Reporting (M73) funktioniert
+- [ ] Calibration-Sequenzen korrekt
+
+**Technische Schritte**:
+1. Analysiere `bambulab_x1.py` Prozeduren
+2. Erweitere G-Code Generator:
+   ```python
+   class BambuGCodeGenerator:
+       def generate_header(self, metadata: dict) -> str:
+           return f"""; HEADER_BLOCK_START
+   ; NodeSlicer {VERSION}
+   ; model printing time: {metadata['time']}
+   ; total layer number: {metadata['layers']}
+   ; HEADER_BLOCK_END
+   """
+
+       def generate_progress_update(self, percent: int) -> str:
+           return f"M73 P{percent}"
+   ```
+
+**Risiken**: Undokumentierte Bambu Lab G-Codes
+
+---
+
+### Phase 4: Frontend: Node-Editor
+**Dauer**: 5 Tasks (10h) | **Risiko**: Mittel | **Abhängig von**: Phase 1
+
+#### Task 4.1: ReactFlow Setup & Konfiguration
+**Ziel**: Basis Node-Editor mit ReactFlow
+
+**Deliverable**:
+- [ ] ReactFlow Integration
+- [ ] Custom Theme (Dark Mode)
+- [ ] Zoom/Pan Controls
+
+**Abhängigkeiten**: Task 1.1
+
+**Definition of Done**:
+- [ ] Leerer Editor wird angezeigt
+- [ ] Zoom/Pan funktioniert
+- [ ] Dark Theme aktiv
+
+**Technische Schritte**:
+1. Setup ReactFlow:
+   ```tsx
+   import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
+
+   export function NodeEditor() {
+     const [nodes, setNodes] = useNodesState([]);
+     const [edges, setEdges] = useEdgesState([]);
+
+     return (
+       <ReactFlow
+         nodes={nodes}
+         edges={edges}
+         onNodesChange={onNodesChange}
+         onEdgesChange={onEdgesChange}
+         onConnect={onConnect}
+         fitView
+       >
+         <Background />
+         <Controls />
+         <MiniMap />
+       </ReactFlow>
+     );
+   }
+   ```
+2. Konfiguriere Custom Theme
+3. Implementiere Keyboard Shortcuts
+
+**Risiken**: Keine
+
+---
+
+#### Task 4.2: Custom Node Components
+**Ziel**: Benutzerdefinierte Node-Komponenten
+
+**Deliverable**:
+- [ ] Base Node Component
+- [ ] 12 MVP Node-Typen als React Components
+- [ ] Input/Output Handles
+
+**Abhängigkeiten**: Task 4.1
+
+**Definition of Done**:
+- [ ] Alle Node-Typen visuell dargestellt
+- [ ] Parameter editierbar
+- [ ] Handles für Verbindungen
+
+**Technische Schritte**:
+1. Erstelle Base Node:
+   ```tsx
+   interface NodeProps {
+     data: NodeData;
+   }
+
+   export function BaseNode({ data }: NodeProps) {
+     return (
+       <div className={`node node-${data.category}`}>
+         <div className="node-header">
+           <Icon name={data.icon} />
+           <span>{data.name}</span>
+         </div>
+         <div className="node-inputs">
+           {data.inputs.map(input => (
+             <Handle type="target" position={Position.Left} id={input.id} />
+           ))}
+         </div>
+         <div className="node-params">
+           {data.parameters.map(param => (
+             <ParameterInput param={param} onChange={...} />
+           ))}
+         </div>
+         <div className="node-outputs">
+           {data.outputs.map(output => (
+             <Handle type="source" position={Position.Right} id={output.id} />
+           ))}
+         </div>
+       </div>
+     );
+   }
+   ```
+2. Implementiere Node-Typen
+
+**Risiken**: Keine
+
+---
+
+#### Task 4.3: Node Palette & Drag-Drop
+**Ziel**: Seitenleiste mit verfügbaren Nodes
+
+**Deliverable**:
+- [ ] Node-Palette nach Kategorien
+- [ ] Drag & Drop auf Canvas
+- [ ] Suchfunktion
+
+**Abhängigkeiten**: Task 4.2
+
+**Definition of Done**:
+- [ ] Nodes können per Drag & Drop hinzugefügt werden
+- [ ] Kategorien klappbar
+- [ ] Suche findet Nodes
+
+**Technische Schritte**:
+1. Implementiere Palette:
+   ```tsx
+   export function NodePalette() {
+     const categories = useNodeCategories();
+
+     return (
+       <aside className="node-palette">
+         <SearchInput onChange={setFilter} />
+         {categories.map(cat => (
+           <CategorySection key={cat.id} category={cat}>
+             {cat.nodes.map(node => (
+               <DraggableNode
+                 key={node.id}
+                 node={node}
+                 onDragStart={(e) => onDragStart(e, node.type)}
+               />
+             ))}
+           </CategorySection>
+         ))}
+       </aside>
+     );
+   }
+   ```
+2. Implementiere onDrop Handler
+
+**Risiken**: Keine
+
+---
+
+#### Task 4.4: Properties Panel
+**Ziel**: Detail-Ansicht für ausgewählten Node
+
+**Deliverable**:
+- [ ] Dynamisches Properties Panel
+- [ ] Parameter-Validierung
+- [ ] Help/Documentation Links
+
+**Abhängigkeiten**: Task 4.3
+
+**Definition of Done**:
+- [ ] Ausgewählter Node zeigt Properties
+- [ ] Änderungen werden live übernommen
+- [ ] Validierungsfehler sichtbar
+
+**Technische Schritte**:
+1. Implementiere Properties Panel:
+   ```tsx
+   export function PropertiesPanel() {
+     const selectedNode = useSelectedNode();
+
+     if (!selectedNode) {
+       return <EmptyState message="Select a node" />;
+     }
+
+     return (
+       <aside className="properties-panel">
+         <h3>{selectedNode.data.name}</h3>
+         <p>{selectedNode.data.description}</p>
+
+         <Form onSubmit={updateNode}>
+           {selectedNode.data.parameters.map(param => (
+             <FormField
+               key={param.id}
+               label={param.name}
+               type={param.type}
+               value={param.value}
+               validation={param.validation}
+               onChange={(v) => updateParam(param.id, v)}
+             />
+           ))}
+         </Form>
+       </aside>
+     );
+   }
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 4.5: Zustand State Management
+**Ziel**: Zentraler State für Node-Graph
+
+**Deliverable**:
+- [ ] Zustand Store für Nodes/Edges
+- [ ] Selektoren für abgeleitete Daten
+- [ ] Undo/Redo Vorbereitung
+
+**Abhängigkeiten**: Task 4.4
+
+**Definition of Done**:
+- [ ] State wird zentral verwaltet
+- [ ] Selektoren performant
+- [ ] State serialisierbar
+
+**Technische Schritte**:
+1. Implementiere Zustand Store:
+   ```tsx
+   interface NodeEditorState {
+     nodes: Node[];
+     edges: Edge[];
+     selectedNodeId: string | null;
+
+     // Actions
+     addNode: (type: string, position: XYPosition) => void;
+     removeNode: (id: string) => void;
+     updateNodeParam: (nodeId: string, paramId: string, value: any) => void;
+     connect: (connection: Connection) => void;
+     disconnect: (edgeId: string) => void;
+
+     // Selectors
+     getNode: (id: string) => Node | undefined;
+     getConnectedNodes: (id: string) => Node[];
+   }
+
+   export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
+     nodes: [],
+     edges: [],
+     selectedNodeId: null,
+
+     addNode: (type, position) => {
+       const newNode = createNode(type, position);
+       set(state => ({ nodes: [...state.nodes, newNode] }));
+     },
+     // ...
+   }));
+   ```
+
+**Risiken**: Keine
+
+---
+
+### Phase 5: Frontend: 3D-Preview
+**Dauer**: 4 Tasks (8h) | **Risiko**: Mittel | **Abhängig von**: Phase 4
+
+#### Task 5.1: Three.js Scene Setup
+**Ziel**: 3D-Szene mit Build Volume
+
+**Deliverable**:
+- [ ] Three.js Canvas Integration
+- [ ] Build Volume Visualisierung
+- [ ] OrbitControls
+
+**Abhängigkeiten**: Task 4.1
+
+**Definition of Done**:
+- [ ] 3D-Szene wird gerendert
+- [ ] Build Volume (256x256x256) sichtbar
+- [ ] Kamera-Rotation funktioniert
+
+**Technische Schritte**:
+1. Setup React Three Fiber:
+   ```tsx
+   import { Canvas } from '@react-three/fiber';
+   import { OrbitControls, Grid } from '@react-three/drei';
+
+   export function Preview3D() {
+     return (
+       <Canvas camera={{ position: [200, 200, 200] }}>
+         <ambientLight intensity={0.5} />
+         <directionalLight position={[10, 10, 5]} />
+
+         <BuildVolume size={[256, 256, 256]} />
+         <Grid args={[256, 256]} />
+
+         <ToolpathRenderer />
+
+         <OrbitControls />
+       </Canvas>
+     );
+   }
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 5.2: Toolpath Line Renderer
+**Ziel**: G-Code Pfade als 3D-Linien
+
+**Deliverable**:
+- [ ] Line Geometry für Toolpaths
+- [ ] Farbkodierung (Extrusion vs Travel)
+- [ ] Dynamische Updates
+
+**Abhängigkeiten**: Task 5.1
+
+**Definition of Done**:
+- [ ] Toolpaths werden als Linien gerendert
+- [ ] Extrusion = Farbe, Travel = Grau
+- [ ] Performance bei 10k+ Segmenten
+
+**Technische Schritte**:
+1. Implementiere Toolpath Renderer:
+   ```tsx
+   import { Line } from '@react-three/drei';
+
+   interface ToolpathProps {
+     segments: ToolpathSegment[];
+   }
+
+   export function ToolpathRenderer({ segments }: ToolpathProps) {
+     const extrusionPoints = useMemo(() =>
+       segments
+         .filter(s => s.type === 'extrusion')
+         .flatMap(s => [[s.start.x, s.start.y, s.start.z], [s.end.x, s.end.y, s.end.z]]),
+       [segments]
+     );
+
+     return (
+       <>
+         <Line points={extrusionPoints} color="orange" lineWidth={2} />
+         <Line points={travelPoints} color="gray" lineWidth={1} opacity={0.3} />
+       </>
+     );
+   }
+   ```
+
+**Risiken**: Performance bei sehr großen Toolpaths
+
+---
+
+#### Task 5.3: Layer Slider & Filtering
+**Ziel**: Layer-weise Anzeige
+
+**Deliverable**:
+- [ ] Layer Slider UI
+- [ ] Layer-Filterung der Anzeige
+- [ ] Layer-Informationen (Höhe, Zeit)
+
+**Abhängigkeiten**: Task 5.2
+
+**Definition of Done**:
+- [ ] Slider zeigt einzelne Layer
+- [ ] Smooth Animation zwischen Layern
+- [ ] Layer-Stats sichtbar
+
+**Technische Schritte**:
+1. Implementiere Layer Controls:
+   ```tsx
+   export function LayerControls() {
+     const { layers, currentLayer, setCurrentLayer } = useLayerStore();
+
+     return (
+       <div className="layer-controls">
+         <Slider
+           min={0}
+           max={layers.length - 1}
+           value={currentLayer}
+           onChange={setCurrentLayer}
+         />
+         <div className="layer-info">
+           Layer {currentLayer + 1} / {layers.length}
+           <br />
+           Z: {layers[currentLayer]?.z.toFixed(2)}mm
+         </div>
+       </div>
+     );
+   }
+   ```
+2. Filter Toolpath basierend auf Layer
+
+**Risiken**: Keine
+
+---
+
+#### Task 5.4: Nozzle Animation (Optional)
+**Ziel**: Animierte Nozzle-Darstellung
+
+**Deliverable**:
+- [ ] Nozzle 3D-Model
+- [ ] Playback-Animation entlang Toolpath
+- [ ] Play/Pause/Speed Controls
+
+**Abhängigkeiten**: Task 5.3
+
+**Definition of Done**:
+- [ ] Nozzle bewegt sich entlang Toolpath
+- [ ] Playback Controls funktionieren
+- [ ] Geschwindigkeit einstellbar
+
+**Technische Schritte**:
+1. Implementiere Nozzle Animation:
+   ```tsx
+   export function NozzleAnimation() {
+     const { playing, speed, progress } = usePlaybackStore();
+     const toolpath = useToolpath();
+
+     const position = useMemo(() =>
+       interpolatePosition(toolpath, progress),
+       [toolpath, progress]
+     );
+
+     useFrame((_, delta) => {
+       if (playing) {
+         updateProgress(delta * speed);
+       }
+     });
+
+     return (
+       <mesh position={position}>
+         <coneGeometry args={[2, 5, 8]} />
+         <meshStandardMaterial color="red" />
+       </mesh>
+     );
+   }
+   ```
+
+**Risiken**: Kann in späteren Phasen nachgeholt werden
+
+---
+
+### Phase 6: Integration: WebSocket Bridge
+**Dauer**: 3 Tasks (6h) | **Risiko**: Hoch | **Abhängig von**: Phase 3, 4
+
+#### Task 6.1: FastAPI WebSocket Server
+**Ziel**: WebSocket-basierte Kommunikation
+
+**Deliverable**:
+- [ ] FastAPI WebSocket Endpoint
+- [ ] JSON-RPC Protokoll
+- [ ] Connection Management
+
+**Abhängigkeiten**: Task 3.3
+
+**Definition of Done**:
+- [ ] WebSocket verbindet sich
+- [ ] Nachrichten werden ausgetauscht
+- [ ] Reconnect bei Verbindungsverlust
+
+**Technische Schritte**:
+1. Implementiere WebSocket Server:
+   ```python
+   from fastapi import FastAPI, WebSocket
+
+   app = FastAPI()
+
+   @app.websocket("/ws")
+   async def websocket_endpoint(websocket: WebSocket):
+       await websocket.accept()
+       try:
+           while True:
+               data = await websocket.receive_json()
+               response = await handle_message(data)
+               await websocket.send_json(response)
+       except WebSocketDisconnect:
+           pass
+
+   async def handle_message(msg: dict) -> dict:
+       match msg["method"]:
+           case "compile":
+               return await compile_graph(msg["params"])
+           case "validate":
+               return await validate_graph(msg["params"])
+           case "export":
+               return await export_3mf(msg["params"])
+   ```
+
+**Risiken**: WebSocket Stabilität bei langen Kompilierungen
+
+---
+
+#### Task 6.2: Frontend WebSocket Client
+**Ziel**: React WebSocket Integration
+
+**Deliverable**:
+- [ ] WebSocket Hook
+- [ ] Auto-Reconnect
+- [ ] Request/Response Handling
+
+**Abhängigkeiten**: Task 6.1
+
+**Definition of Done**:
+- [ ] Frontend verbindet zum Backend
+- [ ] Requests werden gesendet und Responses empfangen
+- [ ] Loading/Error States
+
+**Technische Schritte**:
+1. Implementiere WebSocket Hook:
+   ```tsx
+   export function useWebSocket() {
+     const [connected, setConnected] = useState(false);
+     const ws = useRef<WebSocket | null>(null);
+     const pendingRequests = useRef(new Map());
+
+     const send = useCallback(async (method: string, params: any) => {
+       const id = generateId();
+       return new Promise((resolve, reject) => {
+         pendingRequests.current.set(id, { resolve, reject });
+         ws.current?.send(JSON.stringify({ id, method, params }));
+       });
+     }, []);
+
+     // Connection management...
+
+     return { connected, send };
+   }
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 6.3: Shared Types (TypeScript ↔ Python)
+**Ziel**: Typ-Konsistenz zwischen Frontend und Backend
+
+**Deliverable**:
+- [ ] JSON Schema Definitionen
+- [ ] TypeScript Types generiert
+- [ ] Pydantic Models synchron
+
+**Abhängigkeiten**: Task 6.2
+
+**Definition of Done**:
+- [ ] Types sind synchron
+- [ ] Schema-Validierung funktioniert
+- [ ] CI prüft Konsistenz
+
+**Technische Schritte**:
+1. Definiere JSON Schema:
+   ```json
+   {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "definitions": {
+       "Node": {
+         "type": "object",
+         "properties": {
+           "id": { "type": "string" },
+           "type": { "type": "string" },
+           "position": { "$ref": "#/definitions/Position" },
+           "data": { "$ref": "#/definitions/NodeData" }
+         }
+       }
+     }
+   }
+   ```
+2. Generiere TypeScript mit `json-schema-to-typescript`
+3. Generiere Pydantic mit `datamodel-code-generator`
+
+**Risiken**: Schema-Drift bei schneller Entwicklung
+
+---
+
+### Phase 7: Live-Update System
+**Dauer**: 3 Tasks (6h) | **Risiko**: Hoch | **Abhängig von**: Phase 5, 6
+
+#### Task 7.1: Debounced Compilation
+**Ziel**: Effiziente Neu-Kompilierung bei Änderungen
+
+**Deliverable**:
+- [ ] Debounced Graph Updates
+- [ ] Inkrementelle Kompilierung (wenn möglich)
+- [ ] Compilation Status UI
+
+**Abhängigkeiten**: Task 6.3
+
+**Definition of Done**:
+- [ ] Änderungen triggern Kompilierung nach 300ms
+- [ ] UI zeigt Kompilierungsstatus
+- [ ] Keine unnötigen Kompilierungen
+
+**Technische Schritte**:
+1. Implementiere Debounced Updates:
+   ```tsx
+   export function useAutoCompile() {
+     const graph = useNodeEditorStore(state => ({ nodes: state.nodes, edges: state.edges }));
+     const { send } = useWebSocket();
+     const [compiling, setCompiling] = useState(false);
+
+     const compile = useDebouncedCallback(async (graph) => {
+       setCompiling(true);
+       try {
+         const result = await send('compile', graph);
+         setToolpath(result.toolpath);
+         setGcode(result.gcode);
+       } finally {
+         setCompiling(false);
+       }
+     }, 300);
+
+     useEffect(() => {
+       compile(graph);
+     }, [graph]);
+
+     return { compiling };
+   }
+   ```
+
+**Risiken**: Performance bei komplexen Graphen
+
+---
+
+#### Task 7.2: Streaming Toolpath Updates
+**Ziel**: Progressive Toolpath-Anzeige während Kompilierung
+
+**Deliverable**:
+- [ ] Streaming WebSocket Response
+- [ ] Progressive Rendering
+- [ ] Abbruch bei neuer Änderung
+
+**Abhängigkeiten**: Task 7.1
+
+**Definition of Done**:
+- [ ] Toolpath erscheint progressiv
+- [ ] Alte Kompilierung wird abgebrochen
+- [ ] Smooth visuelle Updates
+
+**Technische Schritte**:
+1. Backend Streaming:
+   ```python
+   async def stream_compilation(websocket, graph):
+       async for segment in compile_graph_streaming(graph):
+           await websocket.send_json({
+               "type": "toolpath_chunk",
+               "data": segment
+           })
+       await websocket.send_json({"type": "compilation_complete"})
+   ```
+2. Frontend Accumulation:
+   ```tsx
+   const [toolpath, setToolpath] = useState<Segment[]>([]);
+
+   ws.onmessage = (event) => {
+     const msg = JSON.parse(event.data);
+     if (msg.type === 'toolpath_chunk') {
+       setToolpath(prev => [...prev, ...msg.data]);
+     }
+   };
+   ```
+
+**Risiken**: Komplexität bei Abbruch-Handling
+
+---
+
+#### Task 7.3: Error Highlighting
+**Ziel**: Fehler im Node-Editor visualisieren
+
+**Deliverable**:
+- [ ] Node-Fehler Highlighting
+- [ ] Edge-Fehler Highlighting
+- [ ] Error Panel mit Details
+
+**Abhängigkeiten**: Task 7.2
+
+**Definition of Done**:
+- [ ] Fehlerhafte Nodes rot markiert
+- [ ] Tooltip mit Fehlerbeschreibung
+- [ ] Error Panel zeigt alle Fehler
+
+**Technische Schritte**:
+1. Implementiere Error Overlay:
+   ```tsx
+   export function NodeErrorOverlay({ nodeId, errors }: Props) {
+     if (errors.length === 0) return null;
+
+     return (
+       <div className="node-error-overlay">
+         <Tooltip content={errors.map(e => e.message).join('\n')}>
+           <ExclamationIcon className="error-icon" />
+         </Tooltip>
+       </div>
+     );
+   }
+   ```
+
+**Risiken**: Keine
+
+---
+
+### Phase 8: 3MF Export Pipeline
+**Dauer**: 3 Tasks (6h) | **Risiko**: Mittel | **Abhängig von**: Phase 7
+
+#### Task 8.1: Export Dialog UI
+**Ziel**: Benutzerfreundlicher Export-Dialog
+
+**Deliverable**:
+- [ ] Export Dialog Modal
+- [ ] Drucker-Auswahl
+- [ ] Filament-Einstellungen
+
+**Abhängigkeiten**: Task 7.3
+
+**Definition of Done**:
+- [ ] Dialog zeigt alle Optionen
+- [ ] Validierung vor Export
+- [ ] Progress-Anzeige
+
+**Technische Schritte**:
+1. Implementiere Export Dialog:
+   ```tsx
+   export function ExportDialog() {
+     const [printer, setPrinter] = useState('bambulab_x1');
+     const [filament, setFilament] = useState('PLA');
+
+     return (
+       <Dialog>
+         <DialogTitle>Export as 3MF</DialogTitle>
+         <DialogContent>
+           <Select label="Printer" value={printer} onChange={setPrinter}>
+             <Option value="bambulab_x1">Bambu Lab X1 Carbon</Option>
+             <Option value="bambulab_p1s">Bambu Lab P1S</Option>
+           </Select>
+           <Select label="Filament" value={filament} onChange={setFilament}>
+             <Option value="PLA">PLA</Option>
+             <Option value="PETG">PETG</Option>
+           </Select>
+         </DialogContent>
+         <DialogActions>
+           <Button onClick={handleExport}>Export</Button>
+         </DialogActions>
+       </Dialog>
+     );
+   }
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 8.2: Backend Export Endpoint
+**Ziel**: 3MF-Generierung im Backend
+
+**Deliverable**:
+- [ ] REST Endpoint für Export
+- [ ] 3MF-Datei Generierung
+- [ ] Download Response
+
+**Abhängigkeiten**: Task 2.5
+
+**Definition of Done**:
+- [ ] Export Endpoint funktioniert
+- [ ] 3MF-Datei valide
+- [ ] Download startet
+
+**Technische Schritte**:
+1. Implementiere Export Endpoint:
+   ```python
+   @app.post("/api/export")
+   async def export_3mf(request: ExportRequest):
+       # Compile graph
+       gcode = compile_graph_to_gcode(request.graph)
+
+       # Build 3MF
+       builder = ThreeMFBuilder()
+       builder.add_production_extension()
+       builder.add_metadata("Application", "NodeSlicer")
+       builder.embed_gcode(gcode)
+
+       # Generate thumbnail
+       thumbnail = generate_thumbnail(request.graph)
+       builder.add_thumbnail(thumbnail)
+
+       # Save and return
+       buffer = BytesIO()
+       builder.save_to_buffer(buffer)
+
+       return StreamingResponse(
+           buffer,
+           media_type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+           headers={"Content-Disposition": f"attachment; filename={request.filename}.3mf"}
+       )
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 8.3: Export Validation & Feedback
+**Ziel**: Qualitätssicherung beim Export
+
+**Deliverable**:
+- [ ] Pre-Export Validierung
+- [ ] Warnungen anzeigen
+- [ ] Export-Zusammenfassung
+
+**Abhängigkeiten**: Task 8.2
+
+**Definition of Done**:
+- [ ] Validierung läuft vor Export
+- [ ] Warnungen werden angezeigt
+- [ ] User kann fortfahren oder abbrechen
+
+**Technische Schritte**:
+1. Implementiere Validierung:
+   ```python
+   def validate_for_export(graph: NodeGraph, printer: str) -> ValidationResult:
+       warnings = []
+       errors = []
+
+       # Check print bounds
+       bounds = calculate_bounds(graph)
+       printer_bounds = get_printer_bounds(printer)
+       if not bounds.fits_in(printer_bounds):
+           errors.append("Print exceeds build volume")
+
+       # Check temperatures
+       max_temp = get_max_temperature(graph)
+       if max_temp > 300:
+           warnings.append(f"High temperature: {max_temp}°C")
+
+       return ValidationResult(errors=errors, warnings=warnings)
+   ```
+
+**Risiken**: Keine
+
+---
+
+### Phase 9: Electron Shell
+**Dauer**: 3 Tasks (6h) | **Risiko**: Niedrig | **Abhängig von**: Phase 8
+
+#### Task 9.1: Electron Setup
+**Ziel**: Electron-Anwendung mit Frontend + Backend
+
+**Deliverable**:
+- [ ] Electron Main Process
+- [ ] Frontend als Renderer
+- [ ] Backend als Child Process
+
+**Abhängigkeiten**: Task 8.3
+
+**Definition of Done**:
+- [ ] Electron App startet
+- [ ] Frontend wird angezeigt
+- [ ] Backend läuft automatisch
+
+**Technische Schritte**:
+1. Setup Electron:
+   ```javascript
+   // main.js
+   const { app, BrowserWindow } = require('electron');
+   const { spawn } = require('child_process');
+
+   let mainWindow;
+   let backendProcess;
+
+   app.whenReady().then(() => {
+     // Start Python backend
+     backendProcess = spawn('python', ['-m', 'backend.main'], {
+       cwd: __dirname,
+     });
+
+     // Create window
+     mainWindow = new BrowserWindow({
+       width: 1400,
+       height: 900,
+       webPreferences: {
+         nodeIntegration: false,
+         contextIsolation: true,
+       }
+     });
+
+     mainWindow.loadURL('http://localhost:5173');
+   });
+   ```
+
+**Risiken**: Python-Bundling kann komplex sein
+
+---
+
+#### Task 9.2: Native File Dialogs
+**Ziel**: System-native Datei-Dialoge
+
+**Deliverable**:
+- [ ] Save Dialog für 3MF Export
+- [ ] Open Dialog für Projekt-Import
+- [ ] Recent Files
+
+**Abhängigkeiten**: Task 9.1
+
+**Definition of Done**:
+- [ ] Save/Open Dialoge funktionieren
+- [ ] Dateien werden korrekt gespeichert
+- [ ] Recent Files werden gespeichert
+
+**Technische Schritte**:
+1. Implementiere IPC für Dialoge:
+   ```javascript
+   // preload.js
+   const { contextBridge, ipcRenderer } = require('electron');
+
+   contextBridge.exposeInMainWorld('electronAPI', {
+     saveFile: (data, defaultPath) => ipcRenderer.invoke('save-file', data, defaultPath),
+     openFile: () => ipcRenderer.invoke('open-file'),
+   });
+
+   // main.js
+   ipcMain.handle('save-file', async (event, data, defaultPath) => {
+     const { filePath } = await dialog.showSaveDialog({
+       defaultPath,
+       filters: [{ name: '3MF Files', extensions: ['3mf'] }],
+     });
+     if (filePath) {
+       await fs.writeFile(filePath, data);
+       return filePath;
+     }
+   });
+   ```
+
+**Risiken**: Keine
+
+---
+
+#### Task 9.3: App Packaging
+**Ziel**: Distributierbare Anwendung
+
+**Deliverable**:
+- [ ] electron-builder Konfiguration
+- [ ] Windows Installer (.exe)
+- [ ] macOS App Bundle (.app)
+- [ ] Linux AppImage
+
+**Abhängigkeiten**: Task 9.2
+
+**Definition of Done**:
+- [ ] Build läuft durch
+- [ ] Installer funktioniert
+- [ ] App startet auf allen Plattformen
+
+**Technische Schritte**:
+1. Konfiguriere electron-builder:
+   ```json
+   {
+     "build": {
+       "appId": "com.nodeslicer.app",
+       "productName": "NodeSlicer",
+       "files": ["dist/**/*", "backend/**/*"],
+       "extraResources": [
+         { "from": "backend", "to": "backend" }
+       ],
+       "win": {
+         "target": "nsis"
+       },
+       "mac": {
+         "target": "dmg"
+       },
+       "linux": {
+         "target": "AppImage"
+       }
+     }
+   }
+   ```
+2. Python Bundling mit PyInstaller oder embedded Python
+
+**Risiken**: Python-Bundling Größe und Komplexität
+
+---
+
+### Phase 10: Testing & Polish
+**Dauer**: 4 Tasks (8h) | **Risiko**: Niedrig | **Abhängig von**: Phase 9
+
+#### Task 10.1: E2E Tests
+**Ziel**: End-to-End Test Suite
+
+**Deliverable**:
+- [ ] Playwright Test Setup
+- [ ] Kritische User Flows
+- [ ] CI Integration
+
+**Abhängigkeiten**: Task 9.3
+
+**Definition of Done**:
+- [ ] 10+ E2E Tests implementiert
+- [ ] Tests laufen in CI
+- [ ] Coverage > 70% der kritischen Flows
+
+**Technische Schritte**:
+1. Setup Playwright
+2. Implementiere Tests für:
+   - Node hinzufügen
+   - Nodes verbinden
+   - Parameter ändern
+   - Export durchführen
+
+**Risiken**: Keine
+
+---
+
+#### Task 10.2: Unit Tests
+**Ziel**: Unit Tests für Core-Logik
+
+**Deliverable**:
+- [ ] Backend Unit Tests
+- [ ] Frontend Unit Tests
+- [ ] Coverage Reports
+
+**Abhängigkeiten**: Task 10.1
+
+**Definition of Done**:
+- [ ] Coverage > 80% für Core-Module
+- [ ] Tests laufen schnell (<1min)
+- [ ] CI Integration
+
+**Technische Schritte**:
+1. Backend: pytest
+2. Frontend: vitest
+
+**Risiken**: Keine
+
+---
+
+#### Task 10.3: Performance Optimierung
+**Ziel**: Performance-Bottlenecks beheben
+
+**Deliverable**:
+- [ ] Profiling-Ergebnisse
+- [ ] Optimierungen implementiert
+- [ ] Performance-Benchmarks
+
+**Abhängigkeiten**: Task 10.2
+
+**Definition of Done**:
+- [ ] 10k Segmente in <100ms gerendert
+- [ ] Kompilierung <500ms für MVP-Graphen
+- [ ] UI bleibt responsive
+
+**Technische Schritte**:
+1. Profiling mit Chrome DevTools und py-spy
+2. Identifiziere Bottlenecks
+3. Implementiere Optimierungen (Memoization, Instancing, etc.)
+
+**Risiken**: Keine
+
+---
+
+#### Task 10.4: UX Polish & Documentation
+**Ziel**: Finale UX-Verbesserungen und Docs
+
+**Deliverable**:
+- [ ] Keyboard Shortcuts
+- [ ] Tooltips & Help
+- [ ] User Guide
+
+**Abhängigkeiten**: Task 10.3
+
+**Definition of Done**:
+- [ ] Alle kritischen Actions haben Shortcuts
+- [ ] Tooltips für alle UI-Elemente
+- [ ] Getting Started Guide
+
+**Technische Schritte**:
+1. Implementiere Keyboard Shortcuts
+2. Füge Tooltips hinzu
+3. Schreibe Dokumentation
+
+**Risiken**: Keine
+
+---
+
+## 8. Abhängigkeits-Graph
+
+```mermaid
+graph TD
+    subgraph "Phase 1: Setup"
+        T1.1[1.1 Monorepo] --> T1.2[1.2 Dependencies]
+        T1.2 --> T1.3[1.3 Dev Environment]
+    end
+
+    subgraph "Phase 2: 3MF Engine"
+        T1.2 --> T2.1[2.1 lib3mf Wrapper]
+        T2.1 --> T2.2[2.2 Production Extension]
+        T2.2 --> T2.3[2.3 Metadata]
+        T2.3 --> T2.4[2.4 G-Code Embedding]
+        T2.4 --> T2.5[2.5 Thumbnails]
+    end
+
+    subgraph "Phase 3: G-Code Generator"
+        T2.1 --> T3.1[3.1 Node Adapter]
+        T3.1 --> T3.2[3.2 MVP Nodes]
+        T3.2 --> T3.3[3.3 Graph Validation]
+        T3.3 --> T3.4[3.4 Bambu Optimizations]
+    end
+
+    subgraph "Phase 4: Node Editor"
+        T1.1 --> T4.1[4.1 ReactFlow Setup]
+        T4.1 --> T4.2[4.2 Custom Nodes]
+        T4.2 --> T4.3[4.3 Node Palette]
+        T4.3 --> T4.4[4.4 Properties Panel]
+        T4.4 --> T4.5[4.5 Zustand State]
+    end
+
+    subgraph "Phase 5: 3D Preview"
+        T4.1 --> T5.1[5.1 Three.js Setup]
+        T5.1 --> T5.2[5.2 Toolpath Renderer]
+        T5.2 --> T5.3[5.3 Layer Slider]
+        T5.3 --> T5.4[5.4 Nozzle Animation]
+    end
+
+    subgraph "Phase 6: WebSocket Bridge"
+        T3.3 --> T6.1[6.1 FastAPI Server]
+        T4.5 --> T6.2[6.2 WS Client]
+        T6.1 --> T6.2
+        T6.2 --> T6.3[6.3 Shared Types]
+    end
+
+    subgraph "Phase 7: Live Updates"
+        T5.4 --> T7.1[7.1 Debounced Compile]
+        T6.3 --> T7.1
+        T7.1 --> T7.2[7.2 Streaming Updates]
+        T7.2 --> T7.3[7.3 Error Highlighting]
+    end
+
+    subgraph "Phase 8: Export"
+        T7.3 --> T8.1[8.1 Export Dialog]
+        T2.5 --> T8.2[8.2 Export Endpoint]
+        T8.1 --> T8.2
+        T8.2 --> T8.3[8.3 Validation]
+    end
+
+    subgraph "Phase 9: Electron"
+        T8.3 --> T9.1[9.1 Electron Setup]
+        T9.1 --> T9.2[9.2 File Dialogs]
+        T9.2 --> T9.3[9.3 Packaging]
+    end
+
+    subgraph "Phase 10: Testing"
+        T9.3 --> T10.1[10.1 E2E Tests]
+        T10.1 --> T10.2[10.2 Unit Tests]
+        T10.2 --> T10.3[10.3 Performance]
+        T10.3 --> T10.4[10.4 UX Polish]
+    end
+
+    style T1.1 fill:#4CAF50
+    style T1.2 fill:#4CAF50
+    style T1.3 fill:#4CAF50
+    style T2.1 fill:#2196F3
+    style T2.2 fill:#2196F3
+    style T2.3 fill:#2196F3
+    style T2.4 fill:#2196F3
+    style T2.5 fill:#2196F3
+    style T3.1 fill:#FF9800
+    style T3.2 fill:#FF9800
+    style T3.3 fill:#FF9800
+    style T3.4 fill:#FF9800
+    style T4.1 fill:#9C27B0
+    style T4.2 fill:#9C27B0
+    style T4.3 fill:#9C27B0
+    style T4.4 fill:#9C27B0
+    style T4.5 fill:#9C27B0
+    style T5.1 fill:#E91E63
+    style T5.2 fill:#E91E63
+    style T5.3 fill:#E91E63
+    style T5.4 fill:#E91E63
+    style T6.1 fill:#00BCD4
+    style T6.2 fill:#00BCD4
+    style T6.3 fill:#00BCD4
+    style T7.1 fill:#CDDC39
+    style T7.2 fill:#CDDC39
+    style T7.3 fill:#CDDC39
+    style T8.1 fill:#795548
+    style T8.2 fill:#795548
+    style T8.3 fill:#795548
+    style T9.1 fill:#607D8B
+    style T9.2 fill:#607D8B
+    style T9.3 fill:#607D8B
+    style T10.1 fill:#F44336
+    style T10.2 fill:#F44336
+    style T10.3 fill:#F44336
+    style T10.4 fill:#F44336
+```
+
+---
+
+## 9. Risiko-Matrix
+
+| Risiko | Wahrscheinlichkeit | Impact | Mitigation |
+|--------|-------------------|--------|------------|
+| lib3mf Production Extension API undokumentiert | Mittel | Hoch | Früh testen, Fallback auf manuelle XML-Manipulation |
+| WebSocket-Stabilität bei langer Kompilierung | Mittel | Mittel | Heartbeat, Timeouts, Reconnect-Logik |
+| Performance bei großen Toolpaths (>100k Segmente) | Hoch | Mittel | Instancing, LOD, Web Workers |
+| Python-Bundling für Electron komplex | Mittel | Mittel | PyInstaller testen, alternative: embedded Python |
+| Undokumentierte Bambu Lab G-Codes | Niedrig | Niedrig | Community-Recherche, Trial-and-Error |
+| Schema-Drift zwischen Frontend/Backend | Mittel | Niedrig | Automatische Code-Generierung, CI-Checks |
+
+---
+
+## 10. Backlog (Nice-to-Have)
+
+Diese Features sind nicht Teil des MVP, können aber in späteren Phasen hinzugefügt werden:
+
+| Feature | Beschreibung | Geschätzte Zeit |
+|---------|--------------|-----------------|
+| Undo/Redo | Command-Pattern basiertes History-System | 8h |
+| Node Templates | Vordefinierte Node-Gruppen speichern/laden | 6h |
+| G-Code Import | Reverse Engineering von bestehendem G-Code | 16h |
+| Multi-Plate | Mehrere Plates in einer 3MF | 12h |
+| AMS Integration | Bambu AMS Filament-Wechsel | 10h |
+| Plugin System | Custom Nodes via API | 20h |
+| Collaborative Editing | Multi-User Bearbeitung | 40h |
+| Version Control | Git-ähnliche Versionierung für Projekte | 16h |
+| OrcaSlicer Import | Profile importieren | 8h |
+| Cloud Sync | Projekte in der Cloud speichern | 20h |
+
+---
+
+## 11. Nächste Schritte
+
+1. **Entscheidung**: Rust vs Python Path bestätigen (Empfehlung: Python)
+2. **Phase 1 starten**: Monorepo aufsetzen
+3. **lib3mf testen**: Production Extension API verifizieren
+4. **Team-Setup**: Rollen definieren (Frontend, Backend, DevOps)
+
+---
+
+*Erstellt: 2026-01-05*
+*Version: 1.0*
