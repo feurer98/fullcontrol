@@ -353,19 +353,19 @@ def gcode_to_bambu_3mf(gcode: str, new_3mf_file: str):
 ### Phase 2: Core: 3MF Engine
 **Dauer**: 5 Tasks (10h) | **Risiko**: Mittel | **Abhängig von**: Phase 1
 
-#### Task 2.1: lib3mf Wrapper-Klasse
+#### Task 2.1: lib3mf Wrapper-Klasse ✅ COMPLETED
 **Ziel**: Python-Wrapper für lib3mf mit typsicherer API
 
 **Deliverable**:
-- [ ] `ThreeMFBuilder` Klasse
-- [ ] Methoden für Model, Build, Resources
+- [x] `ThreeMFBuilder` Klasse
+- [x] Methoden für Model, Build, Resources
 
 **Abhängigkeiten**: Task 1.2
 
 **Definition of Done**:
-- [ ] Kann leeres 3MF erstellen und speichern
-- [ ] Bambu Studio kann Datei öffnen
-- [ ] Unit-Tests für Basis-Funktionen
+- [x] Kann leeres 3MF erstellen und speichern
+- [x] Bambu Studio kann Datei öffnen
+- [x] Unit-Tests für Basis-Funktionen
 
 **Technische Schritte**:
 1. Erstelle `backend/core/threemf_builder.py`:
