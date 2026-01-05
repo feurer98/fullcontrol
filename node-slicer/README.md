@@ -36,6 +36,8 @@ cd ../..
 
 ### Development
 
+#### Option 1: Using pnpm (Recommended for local development)
+
 ```bash
 # Start both frontend and backend dev servers
 pnpm dev
@@ -44,6 +46,24 @@ pnpm dev
 pnpm --filter frontend dev   # Frontend at http://localhost:5173
 pnpm --filter backend dev    # Backend at http://localhost:8000
 ```
+
+#### Option 2: Using Docker Compose
+
+```bash
+# Start all services
+docker-compose up
+
+# Or use the Makefile:
+make dev        # Start in foreground
+make up         # Start in background
+make logs       # View logs
+make down       # Stop services
+make clean      # Clean up everything
+```
+
+Services will be available at:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
 
 ### Build
 
@@ -63,9 +83,53 @@ pnpm --filter frontend test
 pnpm --filter backend test
 ```
 
+### Code Quality
+
+#### Linting & Formatting
+
+```bash
+# Lint all code
+pnpm lint
+
+# Format all code
+pnpm format
+
+# Or use the Makefile:
+make lint
+make format
+```
+
+#### Pre-commit Hooks
+
+Pre-commit hooks are automatically installed with `pnpm install`. They will:
+- Run ESLint and Prettier on frontend TypeScript/JavaScript files
+- Run Black and Ruff on backend Python files
+- Only check staged files for better performance
+
+To bypass hooks (not recommended):
+```bash
+git commit --no-verify
+```
+
+## CI/CD
+
+GitHub Actions automatically runs tests and linting on:
+- All pushes to `main`, `develop`, and `claude/**` branches
+- All pull requests to `main` and `develop`
+
+The CI pipeline includes:
+- Frontend: ESLint, Prettier, Tests, Build
+- Backend: Ruff, Black, MyPy, Pytest
+- Docker: Configuration validation
+
 ## Project Status
 
-Currently implementing **Phase 1: Project Setup** (Task 1.1 - Monorepo Structure)
+Currently implementing **Phase 1: Project Setup**
+
+Completed Tasks:
+- ✅ Task 1.1: Monorepo-Struktur erstellen
+- ✅ Task 1.2: Dependency-Installation
+- ✅ Task 1.3: Dev-Environment & CI Setup
 
 See [PROJECT_PLAN.md](../../docs/NODE_EDITOR_PROJECT_PLAN.md) for full roadmap.
 

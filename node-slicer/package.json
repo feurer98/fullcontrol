@@ -13,13 +13,29 @@
     "build": "pnpm --filter frontend build && pnpm --filter backend build",
     "test": "pnpm --recursive test",
     "lint": "pnpm --recursive lint",
-    "format": "pnpm --recursive format"
+    "format": "pnpm --recursive format",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7"
   },
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
+  },
+  "lint-staged": {
+    "packages/frontend/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "packages/frontend/**/*.{json,css,md}": [
+      "prettier --write"
+    ],
+    "packages/backend/**/*.py": [
+      "black",
+      "ruff check --fix"
+    ]
   }
 }

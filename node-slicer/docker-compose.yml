@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "pnpm install && pnpm dev --host 0.0.0.0"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    networks:
+      - node-slicer-network
+    stdin_open: true
+    tty: true
+
+  backend:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./packages/backend:/app
+      - ../../fullcontrol:/fullcontrol:ro
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "
+        pip install --no-cache-dir -e '.[dev]' &&
+        pip install --no-cache-dir -e /fullcontrol &&
+        uvicorn main:app --reload --host 0.0.0.0 --port 8000
+      "
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    networks:
+      - node-slicer-network
+    stdin_open: true
+    tty: true
+
+networks:
+  node-slicer-network:
+    driver: bridge

@@ -323,20 +323,20 @@ def gcode_to_bambu_3mf(gcode: str, new_3mf_file: str):
 
 ---
 
-#### Task 1.3: Dev-Environment & CI Setup
+#### Task 1.3: Dev-Environment & CI Setup ✅ COMPLETED
 **Ziel**: Entwicklungsumgebung und CI/CD Pipeline
 
 **Deliverable**:
-- [ ] Docker-Compose für lokale Entwicklung
-- [ ] GitHub Actions Workflow
-- [ ] Pre-commit Hooks
+- [x] Docker-Compose für lokale Entwicklung
+- [x] GitHub Actions Workflow
+- [x] Pre-commit Hooks
 
 **Abhängigkeiten**: Task 1.2
 
 **Definition of Done**:
-- [ ] `docker-compose up` startet Frontend + Backend
-- [ ] CI läuft bei Push
-- [ ] Pre-commit Hooks validieren Code
+- [x] `docker-compose up` startet Frontend + Backend
+- [x] CI läuft bei Push
+- [x] Pre-commit Hooks validieren Code
 
 **Technische Schritte**:
 1. Erstelle `docker-compose.yml` mit:
