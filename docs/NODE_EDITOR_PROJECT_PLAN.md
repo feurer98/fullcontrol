@@ -292,19 +292,19 @@ def gcode_to_bambu_3mf(gcode: str, new_3mf_file: str):
 
 ---
 
-#### Task 1.2: Dependency-Installation
+#### Task 1.2: Dependency-Installation ✅ COMPLETED
 **Ziel**: Alle benötigten Pakete installieren und konfigurieren
 
 **Deliverable**:
-- [ ] Frontend: React, ReactFlow, Three.js, Zustand
-- [ ] Backend: FastAPI, WebSockets, lib3mf, FullControl
+- [x] Frontend: React, ReactFlow, Three.js, Zustand
+- [x] Backend: FastAPI, WebSockets, lib3mf, FullControl
 
 **Abhängigkeiten**: Task 1.1
 
 **Definition of Done**:
-- [ ] Import-Tests für alle Hauptmodule erfolgreich
-- [ ] lib3mf Python Bindings funktionieren
-- [ ] FullControl als lokale Dependency eingebunden
+- [x] Import-Tests für alle Hauptmodule erfolgreich
+- [x] lib3mf Python Bindings funktionieren
+- [x] FullControl als lokale Dependency eingebunden
 
 **Technische Schritte**:
 1. Frontend Dependencies:

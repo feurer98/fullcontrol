@@ -9,5 +9,10 @@
     "lint": "ruff check .",
     "format": "black . && ruff check --fix .",
     "test": "pytest"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "jsdom": "^27.4.0"
   }
 }
