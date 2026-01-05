@@ -258,20 +258,20 @@ def gcode_to_bambu_3mf(gcode: str, new_3mf_file: str):
 ### Phase 1: Projekt-Setup
 **Dauer**: 3 Tasks (6h) | **Risiko**: Niedrig | **Abhängig von**: -
 
-#### Task 1.1: Monorepo-Struktur erstellen
+#### Task 1.1: Monorepo-Struktur erstellen ✅ COMPLETED
 **Ziel**: Projektstruktur für Frontend + Backend aufsetzen
 
 **Deliverable**:
-- [ ] Monorepo mit pnpm workspaces
-- [ ] Python Backend Projektstruktur
-- [ ] React Frontend Projektstruktur
+- [x] Monorepo mit pnpm workspaces
+- [x] Python Backend Projektstruktur
+- [x] React Frontend Projektstruktur
 
 **Abhängigkeiten**: Keine
 
 **Definition of Done**:
-- [ ] `pnpm install` läuft fehlerfrei
-- [ ] `pip install -e .` für Backend funktioniert
-- [ ] Dev-Server startet für Frontend
+- [x] `pnpm install` läuft fehlerfrei
+- [x] `pip install -e .` für Backend funktioniert
+- [x] Dev-Server startet für Frontend
 
 **Technische Schritte**:
 1. Erstelle Monorepo-Struktur:
