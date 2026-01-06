@@ -418,3 +418,166 @@ class TestThreeMFBuilder:
         # UUID map should be empty
         uuid_map = builder.get_uuid_map()
         assert len(uuid_map) == 0
+
+    def test_embed_gcode_basic(self):
+        """Test basic G-code embedding."""
+        builder = ThreeMFBuilder()
+
+        gcode = "G28\nG1 X10 Y10 Z0.2\nG1 E5\nM104 S200\n"
+        md5 = builder.embed_gcode(gcode, plate=1)
+
+        # MD5 should be returned
+        assert md5 != ""
+        assert len(md5) == 32  # MD5 hash is 32 hex characters
+
+        # G-code path should be tracked
+        paths = builder.get_embedded_gcode_paths()
+        assert 1 in paths
+        assert paths[1] == "/Metadata/plate_1.gcode"
+
+    def test_embed_gcode_without_md5(self):
+        """Test G-code embedding without MD5 checksum."""
+        builder = ThreeMFBuilder()
+
+        gcode = "G28\nG1 X100 Y100\n"
+        md5 = builder.embed_gcode(gcode, plate=1, generate_md5=False)
+
+        # MD5 should be empty when disabled
+        assert md5 == ""
+
+        # G-code should still be tracked
+        paths = builder.get_embedded_gcode_paths()
+        assert 1 in paths
+
+    def test_embed_gcode_multiple_plates(self):
+        """Test embedding G-code for multiple plates."""
+        builder = ThreeMFBuilder()
+
+        gcode1 = "G28\nG1 X10 Y10\n"
+        gcode2 = "G28\nG1 X20 Y20\n"
+        gcode3 = "G28\nG1 X30 Y30\n"
+
+        md5_1 = builder.embed_gcode(gcode1, plate=1)
+        md5_2 = builder.embed_gcode(gcode2, plate=2)
+        md5_3 = builder.embed_gcode(gcode3, plate=3)
+
+        # All should have different MD5 hashes
+        assert md5_1 != md5_2
+        assert md5_2 != md5_3
+        assert md5_1 != md5_3
+
+        # All plates should be tracked
+        paths = builder.get_embedded_gcode_paths()
+        assert len(paths) == 3
+        assert 1 in paths
+        assert 2 in paths
+        assert 3 in paths
+        assert paths[1] == "/Metadata/plate_1.gcode"
+        assert paths[2] == "/Metadata/plate_2.gcode"
+        assert paths[3] == "/Metadata/plate_3.gcode"
+
+    def test_embed_gcode_md5_verification(self):
+        """Test that MD5 checksum is correct."""
+        import hashlib
+
+        builder = ThreeMFBuilder()
+
+        gcode = "G28\nG1 X50 Y50 Z1\nM104 S220\n"
+        expected_md5 = hashlib.md5(gcode.encode("utf-8")).hexdigest()
+
+        actual_md5 = builder.embed_gcode(gcode, plate=1)
+
+        # MD5 should match
+        assert actual_md5 == expected_md5
+
+    def test_embed_gcode_large_file(self):
+        """Test embedding a large G-code file."""
+        builder = ThreeMFBuilder()
+
+        # Generate a large G-code file (simulate real print)
+        gcode_lines = ["G28\n"]
+        for layer in range(100):
+            gcode_lines.append(f"; Layer {layer}\n")
+            for i in range(50):
+                gcode_lines.append(f"G1 X{i} Y{i} Z{layer * 0.2}\n")
+        gcode = "".join(gcode_lines)
+
+        md5 = builder.embed_gcode(gcode, plate=1)
+
+        # Should handle large files
+        assert md5 != ""
+        assert len(md5) == 32
+
+    def test_embed_gcode_and_save(self):
+        """Test embedding G-code and saving to file."""
+        builder = ThreeMFBuilder()
+        builder.add_metadata("Application", "NodeSlicer")
+
+        # Create a simple mesh
+        vertices = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (5.0, 10.0, 0.0)]
+        triangles = [(0, 1, 2)]
+        mesh = builder.create_mesh_object(vertices, triangles)
+        builder.add_to_build(mesh)
+
+        # Embed G-code
+        gcode = "G28\nG1 X10 Y10 Z0.2\nM104 S200\n"
+        md5 = builder.embed_gcode(gcode, plate=1)
+
+        # Save to file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_with_gcode.3mf"
+            builder.save(output_path)
+
+            # Verify file exists and has content
+            assert output_path.exists()
+            assert output_path.stat().st_size > 0
+
+            # Verify 3MF contains G-code file
+            import zipfile
+
+            with zipfile.ZipFile(output_path, "r") as zip_file:
+                file_list = zip_file.namelist()
+                assert "Metadata/plate_1.gcode" in file_list
+                assert "Metadata/plate_1.gcode.md5" in file_list
+
+                # Verify G-code content
+                gcode_content = zip_file.read("Metadata/plate_1.gcode").decode("utf-8")
+                assert gcode_content == gcode
+
+                # Verify MD5 content
+                md5_content = zip_file.read("Metadata/plate_1.gcode.md5").decode("utf-8")
+                assert md5_content == md5
+
+    def test_embed_gcode_empty_string(self):
+        """Test embedding empty G-code string."""
+        import hashlib
+
+        builder = ThreeMFBuilder()
+
+        gcode = ""
+        md5 = builder.embed_gcode(gcode, plate=1)
+
+        # Should still generate MD5 for empty string
+        expected_md5 = hashlib.md5("".encode("utf-8")).hexdigest()
+        assert md5 == expected_md5
+
+    def test_embed_gcode_special_characters(self):
+        """Test embedding G-code with special characters."""
+        builder = ThreeMFBuilder()
+
+        # G-code with comments and special characters
+        gcode = "; This is a comment\nG28\n; Temperature: 200°C\nG1 X10 Y10\n"
+        md5 = builder.embed_gcode(gcode, plate=1)
+
+        # Should handle special characters
+        assert md5 != ""
+        assert len(md5) == 32
+
+    def test_get_embedded_gcode_paths_empty(self):
+        """Test getting embedded G-code paths when none are embedded."""
+        builder = ThreeMFBuilder()
+
+        paths = builder.get_embedded_gcode_paths()
+
+        assert len(paths) == 0
+        assert isinstance(paths, dict)

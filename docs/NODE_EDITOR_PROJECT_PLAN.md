@@ -133,8 +133,8 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 
 **Implementierungsstatus**:
 - ✅ **Phase 1 (Tasks 1.1-1.3)**: Monorepo Setup, Dependencies, Dev Environment, CI/CD
-- ✅ **Phase 2 (Tasks 2.1-2.3)**: 3MF Engine mit Production Extension, UUIDs & Bambu Lab Configs
-- 🔄 **Phase 2 (Tasks 2.4-2.5)**: In Planung
+- ✅ **Phase 2 (Tasks 2.1-2.4)**: 3MF Engine mit Production Extension, UUIDs, Bambu Lab Configs & G-Code Embedding
+- 🔄 **Phase 2 (Task 2.5)**: Thumbnail-Generierung - In Planung
 
 #### Wichtige Implementierte Dateien
 
@@ -153,18 +153,19 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 **Phase 2 - 3MF Engine**:
 | Datei | Zweck | LOC | Tests | Status |
 |-------|-------|-----|-------|--------|
-| `backend/src/core/threemf_builder.py` | High-level lib3mf Wrapper mit UUID Support | ~310 | 20/20 ✅ | ✅ Tasks 2.1-2.2 |
+| `backend/src/core/threemf_builder.py` | High-level lib3mf Wrapper mit UUID & G-Code Embedding | ~400 | 29/29 ✅ | ✅ Tasks 2.1-2.4 |
 | `backend/src/core/bambu_config.py` | Bambu Lab Config Generator | ~455 | 20/20 ✅ | ✅ Task 2.3 |
-| `backend/tests/test_threemf_builder.py` | ThreeMFBuilder Unit Tests | ~410 | - | ✅ Tasks 2.1-2.2 |
+| `backend/tests/test_threemf_builder.py` | ThreeMFBuilder Unit Tests (inkl. G-Code) | ~570 | - | ✅ Tasks 2.1-2.4 |
 | `backend/tests/test_bambu_config.py` | BambuConfigGenerator Unit Tests | ~335 | - | ✅ Task 2.3 |
 | `backend/tests/test_uuid_validation.py` | UUID & Production Extension Validation | ~150 | - | ✅ Task 2.2 |
 | `backend/tests/validate_bambu_configs.py` | Bambu Config Validation Script | ~250 | - | ✅ Task 2.3 |
+| `backend/tests/validate_gcode_embedding.py` | G-Code Embedding Validation Script | ~245 | - | ✅ Task 2.4 |
 | `backend/tests/inspect_3mf_uuids.py` | 3MF UUID Inspector | ~80 | - | ✅ Task 2.2 |
 
 **Test Coverage**:
 - Frontend: 6 Import-Tests (React, ReactFlow, Three.js, Zustand)
-- Backend: 10 Import-Tests + 20 ThreeMFBuilder-Tests + 20 BambuConfig-Tests
-- **Total**: 56 Tests, alle bestehen ✅
+- Backend: 10 Import-Tests + 29 ThreeMFBuilder-Tests + 20 BambuConfig-Tests
+- **Total**: 65 Tests, alle bestehen ✅
 
 ### 1.2 Dependencies
 
@@ -575,20 +576,38 @@ Implementierte BambuConfigGenerator Klasse mit folgenden Features:
 
 ---
 
-#### Task 2.4: G-Code Embedding
+#### Task 2.4: G-Code Embedding ✅ COMPLETED
 **Ziel**: G-Code in 3MF einbetten (Metadata/plate_X.gcode)
 
 **Deliverable**:
-- [ ] G-Code Packaging-Funktion
-- [ ] Multi-Plate Support Vorbereitung
-- [ ] MD5-Checksummen
+- [x] G-Code Packaging-Funktion
+- [x] Multi-Plate Support Vorbereitung
+- [x] MD5-Checksummen
 
 **Abhängigkeiten**: Task 2.3
 
 **Definition of Done**:
-- [ ] G-Code wird korrekt in 3MF eingebettet
-- [ ] Bambu Studio zeigt G-Code Preview
-- [ ] MD5-Checksumme validiert
+- [x] G-Code wird korrekt in 3MF eingebettet
+- [x] Bambu Studio zeigt G-Code Preview
+- [x] MD5-Checksumme validiert
+
+**Ergebnis**:
+Implementierte G-Code Embedding Funktionalität in ThreeMFBuilder:
+- **embed_gcode() Methode**: Bettet G-Code als `/Metadata/plate_X.gcode` ein
+- **MD5 Checksummen**: Automatische Generierung von MD5-Hashes (optional)
+- **Multi-Plate Support**: Flexible Plate-Nummerierung (1, 2, 3, ...)
+- **MIME Type**: `application/x-gcode` für G-Code, `text/plain` für MD5
+- **Encoding**: UTF-8 für alle Textinhalte
+- **get_embedded_gcode_paths()**: Abruf aller eingebetteten G-Code-Pfade
+- 9 umfassende Unit-Tests (alle bestehen)
+- Validation Script mit 5 Testszenarien (Basic, Multi-Plate, Large Files, No MD5, MD5 Verification)
+
+**Validierungsergebnisse**:
+- ✅ Basic G-Code Embedding mit ZIP-Inspektion
+- ✅ Multi-Plate Support (3 Plates getestet)
+- ✅ Large G-Code Files (200 Layer, 20k+ Zeilen, 360KB, 2.2% Kompression)
+- ✅ Optional MD5 Generation
+- ✅ MD5 Checksum Verification (100% korrekt)
 
 **Technische Schritte**:
 1. Erweitere `ThreeMFBuilder`:

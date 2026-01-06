@@ -7,6 +7,7 @@ for creating and manipulating 3MF files.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from ctypes import c_float, c_uint32
 from pathlib import Path
@@ -34,6 +35,7 @@ class ThreeMFBuilder:
         self.model = self.wrapper.CreateModel()
         self.uuid_map: Dict[int, str] = {}  # Maps resource IDs to UUIDs
         self.production_extension_enabled = False
+        self.embedded_gcode: Dict[int, str] = {}  # Maps plate ID to G-code path
 
     def add_metadata(self, name: str, value: str, namespace: str = "") -> None:
         """
@@ -289,6 +291,82 @@ class ThreeMFBuilder:
             >>> print(f"Mesh resource ID: {mesh.GetResourceID()}, UUID: {uuid_map[mesh.GetResourceID()]}")
         """
         return self.uuid_map.copy()
+
+    def embed_gcode(
+        self,
+        gcode: str,
+        plate: int = 1,
+        generate_md5: bool = True,
+    ) -> str:
+        """
+        Embed G-code into the 3MF file as an attachment.
+
+        This method adds G-code to the 3MF package as Metadata/plate_X.gcode
+        and optionally generates an MD5 checksum file.
+
+        Args:
+            gcode: The G-code content as a string
+            plate: Plate number (default: 1). For multi-plate support.
+            generate_md5: If True, also generate MD5 checksum file (default: True)
+
+        Returns:
+            The MD5 checksum of the G-code (or empty string if generate_md5=False)
+
+        Example:
+            >>> builder = ThreeMFBuilder()
+            >>> gcode = "G28\\nG1 X10 Y10 Z0.2\\nG1 E5\\n"
+            >>> md5 = builder.embed_gcode(gcode, plate=1)
+            >>> print(f"G-code embedded with MD5: {md5}")
+
+        Note:
+            The G-code is stored as /Metadata/plate_{plate}.gcode in the 3MF package.
+            If generate_md5=True, an MD5 checksum is also stored at
+            /Metadata/plate_{plate}.gcode.md5
+        """
+        # Construct the attachment path
+        gcode_path = f"/Metadata/plate_{plate}.gcode"
+
+        # Add the G-code as an attachment
+        try:
+            attachment = self.model.AddAttachment(gcode_path, "application/x-gcode")
+            gcode_bytes = gcode.encode("utf-8")
+            attachment.ReadFromBuffer(gcode_bytes)
+
+            # Track the embedded G-code
+            self.embedded_gcode[plate] = gcode_path
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to embed G-code: {e}")
+
+        # Generate and embed MD5 checksum if requested
+        md5_hash = ""
+        if generate_md5:
+            md5_hash = hashlib.md5(gcode.encode("utf-8")).hexdigest()
+            md5_path = f"/Metadata/plate_{plate}.gcode.md5"
+
+            try:
+                md5_attachment = self.model.AddAttachment(md5_path, "text/plain")
+                md5_attachment.ReadFromBuffer(md5_hash.encode("utf-8"))
+            except Exception as e:
+                # MD5 generation failure is not critical, log and continue
+                print(f"Warning: Failed to embed MD5 checksum: {e}")
+
+        return md5_hash
+
+    def get_embedded_gcode_paths(self) -> Dict[int, str]:
+        """
+        Get the mapping of plate IDs to embedded G-code paths.
+
+        Returns:
+            Dictionary mapping plate IDs (int) to G-code file paths
+
+        Example:
+            >>> builder = ThreeMFBuilder()
+            >>> builder.embed_gcode("G28\\n", plate=1)
+            >>> paths = builder.get_embedded_gcode_paths()
+            >>> print(paths)  # {1: '/Metadata/plate_1.gcode'}
+        """
+        return self.embedded_gcode.copy()
 
     def save(self, path: str | Path) -> None:
         """
