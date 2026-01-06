@@ -131,10 +131,14 @@ Completed Tasks:
   - Monorepo structure with pnpm workspaces
   - Dependency installation (React, FastAPI, lib3mf, FullControl)
   - Dev environment & CI/CD setup
-- ✅ **Phase 2: 3MF Engine** (Tasks 2.1-2.2)
+- ✅ **Phase 2: 3MF Engine** (Tasks 2.1-2.3)
   - ThreeMFBuilder: High-level lib3mf wrapper (~310 LOC)
   - Production Extension Support with RFC 4122 UUIDs
-  - 20 comprehensive unit tests (all passing)
+  - BambuConfigGenerator: Bambu Lab config files (~455 LOC)
+    - model_settings.config (XML)
+    - project_settings.config (JSON)
+    - slice_info.config (XML)
+  - 40 comprehensive unit tests (all passing)
 
 See [PROJECT_PLAN.md](../../docs/NODE_EDITOR_PROJECT_PLAN.md) for full roadmap.
 
