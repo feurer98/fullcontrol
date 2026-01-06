@@ -368,6 +368,110 @@ class ThreeMFBuilder:
         """
         return self.embedded_gcode.copy()
 
+    def embed_thumbnail(
+        self,
+        png_data: bytes,
+        plate: int = 1,
+        thumbnail_type: str = "plate",
+    ) -> str:
+        """
+        Embed a PNG thumbnail into the 3MF file as an attachment.
+
+        This method adds PNG thumbnails to the 3MF package for preview in
+        Bambu Studio and other slicers.
+
+        Standard Bambu Lab thumbnail types:
+        - "plate": Normal size thumbnail (Metadata/plate_X.png)
+        - "plate_small": Small thumbnail (Metadata/plate_X_small.png)
+        - "pick": Picking/selection thumbnail (Metadata/pick_X.png)
+
+        Args:
+            png_data: PNG image data as bytes
+            plate: Plate number (default: 1)
+            thumbnail_type: Type of thumbnail ("plate", "plate_small", "pick")
+
+        Returns:
+            The attachment path in the 3MF file
+
+        Raises:
+            RuntimeError: If thumbnail embedding fails
+            ValueError: If thumbnail_type is invalid
+
+        Example:
+            >>> builder = ThreeMFBuilder()
+            >>> with open("thumbnail.png", "rb") as f:
+            ...     png_data = f.read()
+            >>> builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate")
+            '/Metadata/plate_1.png'
+        """
+        # Validate thumbnail type
+        valid_types = {"plate", "plate_small", "pick"}
+        if thumbnail_type not in valid_types:
+            raise ValueError(
+                f"Invalid thumbnail_type: {thumbnail_type}. "
+                f"Must be one of: {', '.join(valid_types)}"
+            )
+
+        # Construct the attachment path based on thumbnail type
+        if thumbnail_type == "plate":
+            thumbnail_path = f"/Metadata/plate_{plate}.png"
+        elif thumbnail_type == "plate_small":
+            thumbnail_path = f"/Metadata/plate_{plate}_small.png"
+        else:  # pick
+            thumbnail_path = f"/Metadata/pick_{plate}.png"
+
+        # Add the thumbnail as an attachment
+        try:
+            attachment = self.model.AddAttachment(thumbnail_path, "image/png")
+            attachment.ReadFromBuffer(png_data)
+        except Exception as e:
+            raise RuntimeError(f"Failed to embed thumbnail: {e}")
+
+        return thumbnail_path
+
+    def embed_thumbnails_from_generator(
+        self,
+        triangles: Optional[List[Any]] = None,
+        plate: int = 1,
+        projection: str = "top",
+    ) -> Dict[str, str]:
+        """
+        Generate and embed a standard set of thumbnails using ThumbnailGenerator.
+
+        This is a convenience method that generates all three standard Bambu Lab
+        thumbnails (plate, plate_small, pick) and embeds them in one call.
+
+        Args:
+            triangles: Optional list of Triangle objects for rendering
+            plate: Plate number (default: 1)
+            projection: Projection type ("top", "front", "side")
+
+        Returns:
+            Dictionary mapping thumbnail types to their paths
+
+        Example:
+            >>> builder = ThreeMFBuilder()
+            >>> paths = builder.embed_thumbnails_from_generator()
+            >>> print(paths)
+            {
+                'plate': '/Metadata/plate_1.png',
+                'plate_small': '/Metadata/plate_1_small.png',
+                'pick': '/Metadata/pick_1.png'
+            }
+        """
+        from .thumbnail_generator import ThumbnailGenerator
+
+        # Generate thumbnails
+        thumbnail_set = ThumbnailGenerator.create_standard_set(triangles, projection)
+
+        # Embed all thumbnails
+        paths = {}
+        for thumb_type, png_data in thumbnail_set.items():
+            path = self.embed_thumbnail(png_data, plate, thumb_type)
+            paths[thumb_type] = path
+
+        return paths
+
     def save(self, path: str | Path) -> None:
         """
         Save the 3MF model to a file.

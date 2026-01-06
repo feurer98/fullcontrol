@@ -581,3 +581,233 @@ class TestThreeMFBuilder:
 
         assert len(paths) == 0
         assert isinstance(paths, dict)
+
+    # ========== Thumbnail Embedding Tests ==========
+
+    def test_embed_thumbnail_basic(self):
+        """Test basic thumbnail embedding."""
+        import io
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        # Create a simple PNG image
+        img = Image.new("RGB", (256, 256), color="red")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+
+        # Embed the thumbnail
+        path = builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate")
+
+        assert path == "/Metadata/plate_1.png"
+
+    def test_embed_thumbnail_all_types(self):
+        """Test embedding all thumbnail types."""
+        import io
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        img = Image.new("RGB", (256, 256), color="blue")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+
+        # Test all three types
+        path_plate = builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate")
+        assert path_plate == "/Metadata/plate_1.png"
+
+        path_small = builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate_small")
+        assert path_small == "/Metadata/plate_1_small.png"
+
+        path_pick = builder.embed_thumbnail(png_data, plate=1, thumbnail_type="pick")
+        assert path_pick == "/Metadata/pick_1.png"
+
+    def test_embed_thumbnail_multiple_plates(self):
+        """Test embedding thumbnails for multiple plates."""
+        import io
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        img = Image.new("RGB", (256, 256), color="green")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+
+        # Embed for multiple plates
+        path1 = builder.embed_thumbnail(png_data, plate=1)
+        path2 = builder.embed_thumbnail(png_data, plate=2)
+        path3 = builder.embed_thumbnail(png_data, plate=3)
+
+        assert path1 == "/Metadata/plate_1.png"
+        assert path2 == "/Metadata/plate_2.png"
+        assert path3 == "/Metadata/plate_3.png"
+
+    def test_embed_thumbnail_invalid_type(self):
+        """Test that invalid thumbnail type raises ValueError."""
+        import io
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        img = Image.new("RGB", (256, 256), color="yellow")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+
+        with pytest.raises(ValueError, match="Invalid thumbnail_type"):
+            builder.embed_thumbnail(png_data, plate=1, thumbnail_type="invalid_type")
+
+    def test_embed_thumbnail_and_save(self):
+        """Test embedding thumbnail and saving to file."""
+        import io
+        import tempfile
+        import zipfile
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        # Create a simple mesh (required for valid 3MF)
+        vertices = [(0, 0, 0), (10, 0, 0), (5, 10, 0)]
+        triangles_indices = [(0, 1, 2)]
+        obj_id = builder.create_mesh_object(vertices, triangles_indices)
+        builder.add_to_build(obj_id)
+
+        # Create a simple PNG
+        img = Image.new("RGB", (128, 128), color="purple")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+
+        # Embed thumbnail
+        builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate")
+
+        # Save to temporary file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_thumbnail.3mf"
+            builder.save(output_path)
+
+            # Verify the file exists and contains the thumbnail
+            assert output_path.exists()
+
+            # Open the 3MF as a ZIP and check for thumbnail
+            with zipfile.ZipFile(output_path, "r") as z:
+                namelist = z.namelist()
+                assert "Metadata/plate_1.png" in namelist
+
+                # Verify it's valid PNG data
+                thumb_data = z.read("Metadata/plate_1.png")
+                assert thumb_data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_embed_thumbnails_from_generator_no_geometry(self):
+        """Test embedding thumbnails from generator without geometry (placeholders)."""
+        builder = ThreeMFBuilder()
+
+        paths = builder.embed_thumbnails_from_generator()
+
+        # Should return all three standard types
+        assert "plate" in paths
+        assert "plate_small" in paths
+        assert "pick" in paths
+
+        assert paths["plate"] == "/Metadata/plate_1.png"
+        assert paths["plate_small"] == "/Metadata/plate_1_small.png"
+        assert paths["pick"] == "/Metadata/pick_1.png"
+
+    def test_embed_thumbnails_from_generator_with_geometry(self):
+        """Test embedding thumbnails from generator with geometry."""
+        from src.core.thumbnail_generator import Triangle, Point3D
+
+        builder = ThreeMFBuilder()
+
+        # Create a simple triangle
+        triangles = [
+            Triangle(
+                v1=Point3D(0.0, 0.0, 0.0),
+                v2=Point3D(10.0, 0.0, 0.0),
+                v3=Point3D(5.0, 10.0, 0.0),
+            ),
+        ]
+
+        paths = builder.embed_thumbnails_from_generator(triangles=triangles, plate=1)
+
+        assert len(paths) == 3
+        assert all(isinstance(v, str) for v in paths.values())
+
+    def test_embed_thumbnails_from_generator_different_projections(self):
+        """Test embedding thumbnails with different projections."""
+        from src.core.thumbnail_generator import Triangle, Point3D
+
+        triangles = [
+            Triangle(
+                v1=Point3D(0.0, 0.0, 0.0),
+                v2=Point3D(10.0, 0.0, 5.0),
+                v3=Point3D(5.0, 10.0, 10.0),
+            ),
+        ]
+
+        # Test different projections (create new builder for each to avoid duplicate paths)
+        for projection in ["top", "front", "side"]:
+            builder = ThreeMFBuilder()
+            paths = builder.embed_thumbnails_from_generator(
+                triangles=triangles, plate=1, projection=projection
+            )
+            assert len(paths) == 3
+
+    def test_embed_thumbnails_from_generator_multiple_plates(self):
+        """Test embedding thumbnails for multiple plates."""
+        builder = ThreeMFBuilder()
+
+        paths1 = builder.embed_thumbnails_from_generator(plate=1)
+        paths2 = builder.embed_thumbnails_from_generator(plate=2)
+
+        # Verify different plate numbers
+        assert paths1["plate"] == "/Metadata/plate_1.png"
+        assert paths2["plate"] == "/Metadata/plate_2.png"
+
+    def test_embed_thumbnails_complete_workflow(self):
+        """Test complete workflow: mesh, G-code, thumbnails, save."""
+        import io
+        import tempfile
+        import zipfile
+        from PIL import Image
+
+        builder = ThreeMFBuilder()
+
+        # Add metadata
+        builder.add_metadata("Title", "Complete Test")
+
+        # Create a simple mesh
+        vertices = [(0, 0, 0), (10, 0, 0), (5, 10, 0)]
+        triangles_indices = [(0, 1, 2)]
+        obj_id = builder.create_mesh_object(vertices, triangles_indices)
+
+        # Add to build
+        builder.add_to_build(obj_id)
+
+        # Embed G-code
+        gcode = "G28\nG1 X10 Y10\nM104 S200\n"
+        builder.embed_gcode(gcode, plate=1)
+
+        # Create and embed thumbnail
+        img = Image.new("RGB", (256, 256), color="cyan")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_data = buffer.getvalue()
+        builder.embed_thumbnail(png_data, plate=1, thumbnail_type="plate")
+
+        # Save
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test_complete_workflow.3mf"
+            builder.save(output_path)
+
+            # Verify file structure
+            assert output_path.exists()
+
+            with zipfile.ZipFile(output_path, "r") as z:
+                namelist = z.namelist()
+                assert "3D/3dmodel.model" in namelist
+                assert "Metadata/plate_1.gcode" in namelist
+                assert "Metadata/plate_1.png" in namelist

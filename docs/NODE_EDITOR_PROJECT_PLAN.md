@@ -133,8 +133,8 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 
 **Implementierungsstatus**:
 - ✅ **Phase 1 (Tasks 1.1-1.3)**: Monorepo Setup, Dependencies, Dev Environment, CI/CD
-- ✅ **Phase 2 (Tasks 2.1-2.4)**: 3MF Engine mit Production Extension, UUIDs, Bambu Lab Configs & G-Code Embedding
-- 🔄 **Phase 2 (Task 2.5)**: Thumbnail-Generierung - In Planung
+- ✅ **Phase 2 (Tasks 2.1-2.5)**: 3MF Engine komplett - Production Extension, UUIDs, Bambu Lab Configs, G-Code Embedding & Thumbnail-Generierung
+- 🔄 **Phase 3**: In Planung
 
 #### Wichtige Implementierte Dateien
 
@@ -153,19 +153,22 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 **Phase 2 - 3MF Engine**:
 | Datei | Zweck | LOC | Tests | Status |
 |-------|-------|-----|-------|--------|
-| `backend/src/core/threemf_builder.py` | High-level lib3mf Wrapper mit UUID & G-Code Embedding | ~400 | 29/29 ✅ | ✅ Tasks 2.1-2.4 |
+| `backend/src/core/threemf_builder.py` | High-level lib3mf Wrapper mit UUID, G-Code & Thumbnails | ~485 | 39/39 ✅ | ✅ Tasks 2.1-2.5 |
 | `backend/src/core/bambu_config.py` | Bambu Lab Config Generator | ~455 | 20/20 ✅ | ✅ Task 2.3 |
-| `backend/tests/test_threemf_builder.py` | ThreeMFBuilder Unit Tests (inkl. G-Code) | ~570 | - | ✅ Tasks 2.1-2.4 |
+| `backend/src/core/thumbnail_generator.py` | PNG Thumbnail Generator (Pillow-basiert) | ~285 | 22/22 ✅ | ✅ Task 2.5 |
+| `backend/tests/test_threemf_builder.py` | ThreeMFBuilder Unit Tests (inkl. G-Code & Thumbnails) | ~815 | - | ✅ Tasks 2.1-2.5 |
 | `backend/tests/test_bambu_config.py` | BambuConfigGenerator Unit Tests | ~335 | - | ✅ Task 2.3 |
+| `backend/tests/test_thumbnail_generator.py` | ThumbnailGenerator Unit Tests | ~370 | - | ✅ Task 2.5 |
 | `backend/tests/test_uuid_validation.py` | UUID & Production Extension Validation | ~150 | - | ✅ Task 2.2 |
 | `backend/tests/validate_bambu_configs.py` | Bambu Config Validation Script | ~250 | - | ✅ Task 2.3 |
 | `backend/tests/validate_gcode_embedding.py` | G-Code Embedding Validation Script | ~245 | - | ✅ Task 2.4 |
+| `backend/tests/validate_thumbnail_generation.py` | Thumbnail Generation Validation Script | ~395 | - | ✅ Task 2.5 |
 | `backend/tests/inspect_3mf_uuids.py` | 3MF UUID Inspector | ~80 | - | ✅ Task 2.2 |
 
 **Test Coverage**:
 - Frontend: 6 Import-Tests (React, ReactFlow, Three.js, Zustand)
-- Backend: 10 Import-Tests + 29 ThreeMFBuilder-Tests + 20 BambuConfig-Tests
-- **Total**: 65 Tests, alle bestehen ✅
+- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests
+- **Total**: 97 Tests, alle bestehen ✅
 
 ### 1.2 Dependencies
 
@@ -632,22 +635,42 @@ Implementierte G-Code Embedding Funktionalität in ThreeMFBuilder:
 
 ---
 
-#### Task 2.5: Thumbnail-Generierung
+#### Task 2.5: Thumbnail-Generierung ✅ COMPLETED
 **Ziel**: PNG-Thumbnails für 3MF-Preview
 
 **Deliverable**:
-- [ ] Thumbnail-Renderer (PNG)
-- [ ] Verschiedene Größen (plate_X.png, plate_X_small.png)
-- [ ] Plate-Übersicht (pick_X.png)
+- [x] Thumbnail-Renderer (PNG)
+- [x] Verschiedene Größen (plate_X.png, plate_X_small.png)
+- [x] Plate-Übersicht (pick_X.png)
 
 **Abhängigkeiten**: Task 2.4
 
 **Definition of Done**:
-- [ ] Thumbnails werden generiert
-- [ ] Bambu Studio zeigt Vorschau
-- [ ] Korrektes Seitenverhältnis
+- [x] Thumbnails werden generiert
+- [x] Bambu Studio zeigt Vorschau
+- [x] Korrektes Seitenverhältnis
 
-**Technische Schritte**:
+**Ergebnis**:
+Implementierte ThumbnailGenerator Klasse mit umfassender Funktionalität:
+- **ThumbnailGenerator Klasse**: Generierung von PNG-Thumbnails in verschiedenen Größen
+- **Placeholder-Generierung**: Solid, Gradient und Text-Placeholders
+- **Geometry-basierte Thumbnails**: Rendering von 3D-Modellen als 2D-Projektionen (top/front/side)
+- **Standard-Größen**: 256x256 (plate), 64x64 (plate_small), 128x128 (pick)
+- **ThreeMFBuilder Integration**:
+  - `embed_thumbnail()`: Einbetten einzelner Thumbnails
+  - `embed_thumbnails_from_generator()`: Automatische Generierung & Einbettung aller 3 Standard-Thumbnails
+- **22 ThumbnailGenerator Unit-Tests** (alle bestehen)
+- **10 ThreeMFBuilder Thumbnail-Tests** (alle bestehen)
+- **Validation Script** mit 5 umfassenden Tests
+
+**Validierungsergebnisse**:
+- ✅ Placeholder-Generierung (Solid, Gradient, Text)
+- ✅ Geometry-basierte Thumbnails (Pyramid, Cube)
+- ✅ Standard Thumbnail Set (3 Größen)
+- ✅ 3MF Embedding (ZIP-Struktur verifiziert)
+- ✅ Complete Workflow (Mesh + G-Code + Thumbnails)
+
+**Technische Implementierung**:
 1. Option A: Server-side Rendering mit Pillow
 2. Option B: Three.js Screenshot vom Frontend
 3. Implementiere `ThumbnailGenerator`:
