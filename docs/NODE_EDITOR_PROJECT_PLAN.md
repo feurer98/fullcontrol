@@ -134,8 +134,8 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 **Implementierungsstatus**:
 - ✅ **Phase 1 (Tasks 1.1-1.3)**: Monorepo Setup, Dependencies, Dev Environment, CI/CD
 - ✅ **Phase 2 (Tasks 2.1-2.5)**: 3MF Engine komplett - Production Extension, UUIDs, Bambu Lab Configs, G-Code Embedding & Thumbnail-Generierung
-- 🔄 **Phase 3 (Task 3.1)**: G-Code Generator - Node-basierter Adapter abgeschlossen
-- 🔄 **Phase 3 (Tasks 3.2-3.4)**: In Planung
+- ✅ **Phase 3 (Tasks 3.1-3.2)**: G-Code Generator - Node-Adapter & MVP Node-Definitionen abgeschlossen
+- 🔄 **Phase 3 (Tasks 3.3-3.4)**: In Planung
 
 #### Wichtige Implementierte Dateien
 
@@ -171,13 +171,15 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 |-------|-------|-----|-------|--------|
 | `backend/src/core/node_types.py` | Node-Graph Datenstrukturen (Node, Edge, Port, Parameter) | ~190 | - | ✅ Task 3.1 |
 | `backend/src/core/node_converter.py` | Node → FullControl Steps Converter | ~230 | 18/18 ✅ | ✅ Task 3.1 |
+| `backend/src/core/node_definitions.py` | 12 MVP Node-Definitionen & Registry-System | ~490 | 40/40 ✅ | ✅ Task 3.2 |
 | `backend/tests/test_node_converter.py` | NodeConverter Unit Tests | ~420 | - | ✅ Task 3.1 |
+| `backend/tests/test_node_definitions.py` | NodeDefinitions Unit Tests | ~410 | - | ✅ Task 3.2 |
 | `backend/tests/validate_node_converter.py` | Node-zu-G-Code Validation Script | ~330 | - | ✅ Task 3.1 |
 
 **Test Coverage**:
 - Frontend: 6 Import-Tests (React, ReactFlow, Three.js, Zustand)
-- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests + 18 NodeConverter-Tests
-- **Total**: 115 Tests, alle bestehen ✅
+- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests + 18 NodeConverter-Tests + 40 NodeDefinitions-Tests
+- **Total**: 155 Tests, alle bestehen ✅
 
 ### 1.2 Dependencies
 
@@ -755,21 +757,45 @@ Implementiertes Node-Graph zu G-Code Konvertierungssystem:
 
 ---
 
-#### Task 3.2: MVP Node-Definitionen
+#### Task 3.2: MVP Node-Definitionen ✅ COMPLETED
 **Ziel**: Basis Node-Typen implementieren
 
 **Deliverable**:
-- [ ] 12 MVP Node-Typen (siehe Spezifikation)
-- [ ] Node-Registry System
+- [x] 12 MVP Node-Typen (siehe Spezifikation)
+- [x] Node-Registry System
 
 **Abhängigkeiten**: Task 3.1
 
 **Definition of Done**:
-- [ ] Alle MVP-Nodes implementiert
-- [ ] G-Code Output korrekt
-- [ ] Validierung funktioniert
+- [x] Alle MVP-Nodes implementiert
+- [x] G-Code Output korrekt
+- [x] Validierung funktioniert
 
-**Technische Schritte**:
+**Ergebnis**:
+Implementiertes formales Node-Definitions-System mit vollständiger Validierung:
+- **node_definitions.py** (~490 LOC): Formale Node-Definitionen
+  - NodeDefinition Klasse mit Validierung
+  - ValidationResult für Fehler-/Warnungs-Reporting
+  - 12 vollständige Node-Definitionen mit:
+    * Input/Output Port-Definitionen
+    * Parameter-Definitionen mit Ranges/Options
+    * UI-Farben und Icons
+    * Help-Text für alle Parameter
+- **NODE_REGISTRY**: Zentrales Registry-System
+  - get_node_definition(): Lookup nach Typ
+  - get_all_node_definitions(): Alle Nodes
+  - get_nodes_by_category(): Nodes nach Kategorie
+  - validate_node_type(): Typ-Validierung
+- **Kategorien**: 5 Kategorien mit jeweils spezifischen Nodes
+  - Control (2): Start, End
+  - Movement (3): Home, LinearMove, ExtrudeMove
+  - Temperature (4): SetHotend, WaitHotend, SetBed, WaitBed
+  - Hardware (1): SetFan
+  - Utility (2): Comment, CustomGCode
+- **40 Unit-Tests** (alle bestehen)
+- **Parameter-Validierung**: Min/Max, Options, Required-Checks
+
+**Technische Implementierung**:
 1. Implementiere Node-Definitionen:
    ```python
    @dataclass
