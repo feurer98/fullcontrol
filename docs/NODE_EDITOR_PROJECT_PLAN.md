@@ -134,7 +134,8 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 **Implementierungsstatus**:
 - ✅ **Phase 1 (Tasks 1.1-1.3)**: Monorepo Setup, Dependencies, Dev Environment, CI/CD
 - ✅ **Phase 2 (Tasks 2.1-2.5)**: 3MF Engine komplett - Production Extension, UUIDs, Bambu Lab Configs, G-Code Embedding & Thumbnail-Generierung
-- 🔄 **Phase 3**: In Planung
+- 🔄 **Phase 3 (Task 3.1)**: G-Code Generator - Node-basierter Adapter abgeschlossen
+- 🔄 **Phase 3 (Tasks 3.2-3.4)**: In Planung
 
 #### Wichtige Implementierte Dateien
 
@@ -165,10 +166,18 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 | `backend/tests/validate_thumbnail_generation.py` | Thumbnail Generation Validation Script | ~395 | - | ✅ Task 2.5 |
 | `backend/tests/inspect_3mf_uuids.py` | 3MF UUID Inspector | ~80 | - | ✅ Task 2.2 |
 
+**Phase 3 - G-Code Generator**:
+| Datei | Zweck | LOC | Tests | Status |
+|-------|-------|-----|-------|--------|
+| `backend/src/core/node_types.py` | Node-Graph Datenstrukturen (Node, Edge, Port, Parameter) | ~190 | - | ✅ Task 3.1 |
+| `backend/src/core/node_converter.py` | Node → FullControl Steps Converter | ~230 | 18/18 ✅ | ✅ Task 3.1 |
+| `backend/tests/test_node_converter.py` | NodeConverter Unit Tests | ~420 | - | ✅ Task 3.1 |
+| `backend/tests/validate_node_converter.py` | Node-zu-G-Code Validation Script | ~330 | - | ✅ Task 3.1 |
+
 **Test Coverage**:
 - Frontend: 6 Import-Tests (React, ReactFlow, Three.js, Zustand)
-- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests
-- **Total**: 97 Tests, alle bestehen ✅
+- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests + 18 NodeConverter-Tests
+- **Total**: 115 Tests, alle bestehen ✅
 
 ### 1.2 Dependencies
 
@@ -693,21 +702,35 @@ Implementierte ThumbnailGenerator Klasse mit umfassender Funktionalität:
 ### Phase 3: Core: G-Code Generator
 **Dauer**: 4 Tasks (8h) | **Risiko**: Niedrig | **Abhängig von**: Phase 2
 
-#### Task 3.1: Node-basierter G-Code Adapter
+#### Task 3.1: Node-basierter G-Code Adapter ✅ COMPLETED
 **Ziel**: FullControl-Integration für Node-basierte Ausführung
 
 **Deliverable**:
-- [ ] Node → FullControl Steps Konverter
-- [ ] Bidirektionales Mapping
+- [x] Node → FullControl Steps Konverter
+- [x] Bidirektionales Mapping
 
 **Abhängigkeiten**: Task 2.1
 
 **Definition of Done**:
-- [ ] Nodes werden korrekt zu Steps konvertiert
-- [ ] Bestehende FullControl-Funktionen nutzbar
-- [ ] Unit-Tests für alle Node-Typen
+- [x] Nodes werden korrekt zu Steps konvertiert
+- [x] Bestehende FullControl-Funktionen nutzbar
+- [x] Unit-Tests für alle Node-Typen
 
-**Technische Schritte**:
+**Ergebnis**:
+Implementiertes Node-Graph zu G-Code Konvertierungssystem:
+- **node_types.py** (~190 LOC): Basis-Datenstrukturen
+  - NodeCategory, PortType, ParameterType Enums
+  - PortDefinition, ParameterDefinition mit Validierung
+  - Node, Edge, NodeGraph Klassen
+- **node_converter.py** (~230 LOC): Hauptkonverter
+  - NodeConverter Klasse mit topologischer Sortierung
+  - Zyklus-Erkennung (DFS-basiert)
+  - Graph-Validierung
+  - 12 Node-Typen unterstützt: Start, End, Home, LinearMove, ExtrudeMove, SetHotend, WaitHotend, SetBed, WaitBed, SetFan, Comment, CustomGCode
+- **18 Unit-Tests** (alle bestehen)
+- **Validation Script** mit 4 Szenarien (alle bestehen)
+
+**Technische Implementierung**:
 1. Erstelle `NodeToStepsConverter`:
    ```python
    class NodeToStepsConverter:
