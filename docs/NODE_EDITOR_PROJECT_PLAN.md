@@ -134,8 +134,8 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 **Implementierungsstatus**:
 - ✅ **Phase 1 (Tasks 1.1-1.3)**: Monorepo Setup, Dependencies, Dev Environment, CI/CD
 - ✅ **Phase 2 (Tasks 2.1-2.5)**: 3MF Engine komplett - Production Extension, UUIDs, Bambu Lab Configs, G-Code Embedding & Thumbnail-Generierung
-- ✅ **Phase 3 (Tasks 3.1-3.2)**: G-Code Generator - Node-Adapter & MVP Node-Definitionen abgeschlossen
-- 🔄 **Phase 3 (Tasks 3.3-3.4)**: In Planung
+- ✅ **Phase 3 (Tasks 3.1-3.3)**: G-Code Generator - Node-Adapter, MVP Node-Definitionen & Graph-Validierung abgeschlossen
+- 🔄 **Phase 3 (Task 3.4)**: Bambu Lab G-Code Optimierungen - In Planung
 
 #### Wichtige Implementierte Dateien
 
@@ -172,14 +172,16 @@ node-slicer/                        # Node-Editor Projekt (Monorepo) ⭐ NEU
 | `backend/src/core/node_types.py` | Node-Graph Datenstrukturen (Node, Edge, Port, Parameter) | ~190 | - | ✅ Task 3.1 |
 | `backend/src/core/node_converter.py` | Node → FullControl Steps Converter | ~230 | 18/18 ✅ | ✅ Task 3.1 |
 | `backend/src/core/node_definitions.py` | 12 MVP Node-Definitionen & Registry-System | ~490 | 40/40 ✅ | ✅ Task 3.2 |
+| `backend/src/core/graph_validator.py` | Graph Validation & Execution Engine | ~350 | 23/23 ✅ | ✅ Task 3.3 |
 | `backend/tests/test_node_converter.py` | NodeConverter Unit Tests | ~420 | - | ✅ Task 3.1 |
 | `backend/tests/test_node_definitions.py` | NodeDefinitions Unit Tests | ~410 | - | ✅ Task 3.2 |
+| `backend/tests/test_graph_validator.py` | GraphValidator Unit Tests | ~460 | - | ✅ Task 3.3 |
 | `backend/tests/validate_node_converter.py` | Node-zu-G-Code Validation Script | ~330 | - | ✅ Task 3.1 |
 
 **Test Coverage**:
 - Frontend: 6 Import-Tests (React, ReactFlow, Three.js, Zustand)
-- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests + 18 NodeConverter-Tests + 40 NodeDefinitions-Tests
-- **Total**: 155 Tests, alle bestehen ✅
+- Backend: 10 Import-Tests + 39 ThreeMFBuilder-Tests + 20 BambuConfig-Tests + 22 ThumbnailGenerator-Tests + 18 NodeConverter-Tests + 40 NodeDefinitions-Tests + 23 GraphValidator-Tests
+- **Total**: 172 Tests, alle bestehen ✅
 
 ### 1.2 Dependencies
 
@@ -831,35 +833,63 @@ Implementiertes formales Node-Definitions-System mit vollständiger Validierung:
 
 ---
 
-#### Task 3.3: Graph Validation & Execution
+#### Task 3.3: Graph Validation & Execution ✅ COMPLETED
 **Ziel**: Graph-Validierung und Ausführungs-Engine
 
 **Deliverable**:
-- [ ] Topologische Sortierung
-- [ ] Zyklus-Erkennung
-- [ ] Connection-Validierung
+- [x] Topologische Sortierung
+- [x] Zyklus-Erkennung
+- [x] Connection-Validierung
 
 **Abhängigkeiten**: Task 3.2
 
 **Definition of Done**:
-- [ ] Zyklen werden erkannt und gemeldet
-- [ ] Ungültige Verbindungen blockiert
-- [ ] Ausführungsreihenfolge korrekt
+- [x] Zyklen werden erkannt und gemeldet
+- [x] Ungültige Verbindungen blockiert
+- [x] Ausführungsreihenfolge korrekt
 
-**Technische Schritte**:
+**Ergebnis**:
+Vollständiges Graph-Validierungs- und Ausführungssystem implementiert:
+- **graph_validator.py** (~350 LOC): Umfassende Validierungs-Engine
+  - GraphValidator Klasse mit 8 Validierungsmethoden:
+    * Empty graph detection
+    * Node validation (unknown types, duplicate IDs, parameter validation)
+    * Edge validation (duplicate IDs, non-existent nodes)
+    * Start node validation (exactly one required)
+    * End node validation (warning if missing)
+    * Cycle detection (DFS-basiert mit Pfad-Tracking)
+    * Reachability analysis (BFS von Start-Node)
+    * Connection validation (Port-Typ-Kompatibilität)
+    * Isolated node detection
+  - GraphExecutor Klasse mit Topological Sorting (Kahn's Algorithm)
+  - Strukturiertes Error-Reporting mit ValidationError & GraphValidationResult
+- **23 Unit-Tests** (alle bestehen):
+  - 16 GraphValidator Tests (empty graphs, cycles, duplicates, ports, parameters, etc.)
+  - 4 GraphExecutor Tests (execution order, branches, error cases)
+  - 3 ValidationResult Tests (error/warning handling)
+- **Test Coverage**: Alle 172 Backend-Tests bestehen
+
+**Technische Implementierung**:
 1. Implementiere Graph-Utilities:
    ```python
-   class GraphProcessor:
-       def topological_sort(self, graph: NodeGraph) -> List[Node]:
-           """Kahn's Algorithm"""
-           ...
+   class GraphValidator:
+       def validate(self, graph: NodeGraph) -> GraphValidationResult:
+           """Comprehensive validation with 8 checks"""
+           result = GraphValidationResult(is_valid=True)
+           self._validate_nodes(graph, result)
+           self._validate_edges(graph, result)
+           self._validate_start_node(graph, result)
+           self._validate_end_node(graph, result)
+           self._validate_cycles(graph, result)
+           self._validate_reachability(graph, result)
+           self._validate_connections(graph, result)
+           self._validate_isolated_nodes(graph, result)
+           return result
 
-       def detect_cycles(self, graph: NodeGraph) -> List[List[str]]:
-           """DFS-basierte Zyklus-Erkennung"""
-           ...
-
-       def validate_connections(self, graph: NodeGraph) -> List[ValidationError]:
-           """Typ-Kompatibilität prüfen"""
+   class GraphExecutor:
+       def get_execution_order(self, graph: NodeGraph) -> List[Node]:
+           """Kahn's Algorithm for topological sorting"""
+           # Calculate in-degrees, process queue, verify no cycles
            ...
    ```
 
