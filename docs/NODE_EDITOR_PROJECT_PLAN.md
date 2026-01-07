@@ -1077,55 +1077,100 @@ export function NodeEditor() {
 
 ---
 
-#### Task 4.2: Custom Node Components
+#### Task 4.2: Custom Node Components ✅ COMPLETED
 **Ziel**: Benutzerdefinierte Node-Komponenten
 
 **Deliverable**:
-- [ ] Base Node Component
-- [ ] 12 MVP Node-Typen als React Components
-- [ ] Input/Output Handles
+- [x] Base Node Component
+- [x] 12 MVP Node-Typen als React Components
+- [x] Input/Output Handles
 
 **Abhängigkeiten**: Task 4.1
 
 **Definition of Done**:
-- [ ] Alle Node-Typen visuell dargestellt
-- [ ] Parameter editierbar
-- [ ] Handles für Verbindungen
+- [x] Alle Node-Typen visuell dargestellt
+- [x] Parameter editierbar (angezeigt)
+- [x] Handles für Verbindungen
 
-**Technische Schritte**:
-1. Erstelle Base Node:
-   ```tsx
-   interface NodeProps {
-     data: NodeData;
-   }
+**Ergebnis**:
+Vollständige Custom Node Components basierend auf Backend-Definitionen:
+- **types/nodes.ts** (~380 LOC): TypeScript Type Definitions
+  - NodeCategory, PortType, ParameterType Union Types mit Constants
+  - PortDefinition, ParameterDefinition, NodeDefinition Interfaces
+  - NODE_DEFINITIONS mit allen 12 MVP Node-Typen
+  - CATEGORY_COLORS Mapping
+- **BaseNode.tsx** (~90 LOC): Universelle Node-Komponente
+  - Memo-optimierte React Component
+  - Dynamisches Rendering basierend auf NodeDefinition
+  - Input/Output Handle Rendering mit Position Left/Right
+  - Parameter-Display mit Type-spezifischer Formatierung
+  - Category-basierte Styling
+  - Material Icons Integration
+- **BaseNode.css** (~140 LOC): Node-Styling
+  - Category-spezifische Header-Farben
+  - Handle-Styles mit Hover/Required States
+  - Parameter-Layout (Label + Value)
+  - Responsive Node-Width
+- **nodes/index.ts**: NodeTypes Registry für ReactFlow
+  - Alle 12 MVP Node-Typen registriert (Start, End, Home, LinearMove, ExtrudeMove, SetHotend, WaitHotend, SetBed, WaitBed, SetFan, Comment, CustomGCode)
+- **BaseNode.test.tsx**: 11 Unit-Tests
+  - BaseNode Component Tests
+  - NODE_DEFINITIONS Tests für alle 12 Nodes
+  - Validation Tests (Properties, Colors)
+- **NodeEditor Integration**: Updated mit custom nodeTypes
+- **index.html**: Material Icons Font hinzugefügt
 
-   export function BaseNode({ data }: NodeProps) {
-     return (
-       <div className={`node node-${data.category}`}>
-         <div className="node-header">
-           <Icon name={data.icon} />
-           <span>{data.name}</span>
-         </div>
-         <div className="node-inputs">
-           {data.inputs.map(input => (
-             <Handle type="target" position={Position.Left} id={input.id} />
-           ))}
-         </div>
-         <div className="node-params">
-           {data.parameters.map(param => (
-             <ParameterInput param={param} onChange={...} />
-           ))}
-         </div>
-         <div className="node-outputs">
-           {data.outputs.map(output => (
-             <Handle type="source" position={Position.Right} id={output.id} />
-           ))}
-         </div>
-       </div>
-     );
-   }
-   ```
-2. Implementiere Node-Typen
+**Features**:
+- Alle 12 MVP Node-Typen als React Components
+- Category-basierte Farbcodierung (Control: Purple, Movement: Blue, Temperature: Orange, Hardware: Blue Grey, Utility: Brown)
+- Input/Output Handles mit Port-Type Awareness
+- Parameter-Display mit Number Formatting (2 Dezimalstellen)
+- Required Input Indicators (Red Handles)
+- Material Icons für alle Node-Typen
+- Memo-Optimierung für Performance
+
+**Test Coverage**:
+- Alle 11 BaseNode-Tests bestehen ✅
+- Alle 19 Frontend-Tests bestehen ✅ (11 neue + 2 NodeEditor + 6 Imports)
+- TypeScript Build erfolgreich (343.95 kB)
+
+**Technische Implementierung**:
+```tsx
+export const BaseNode = memo(({ data, selected }: BaseNodeProps) => {
+  const { label, category, definition, parameters } = data;
+
+  return (
+    <div className={`base-node base-node-${category}`}
+         style={{ borderColor: definition.color }}>
+      {/* Input Handles */}
+      {definition.inputs.map((input) => (
+        <Handle type="target" position={Position.Left} id={input.id} />
+      ))}
+
+      {/* Header mit Icon & Label */}
+      <div className="node-header" style={{ backgroundColor: definition.color }}>
+        <span className="node-icon material-icons">{definition.icon}</span>
+        <span className="node-title">{label}</span>
+      </div>
+
+      {/* Parameter Display */}
+      <div className="node-body">
+        {definition.parameters.map((param) => (
+          <div className="node-parameter">
+            <label>{param.label}</label>
+            <span>{parameters[param.id] ?? param.defaultValue}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Output Handles */}
+      {definition.outputs.map((output) => (
+        <Handle type="source" position={Position.Right} id={output.id} />
+      ))}
+    </div>
+  );
+});
+```
 
 **Risiken**: Keine
 

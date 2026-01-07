@@ -11,26 +11,55 @@ import ReactFlow, {
   Panel,
 } from 'reactflow';
 import type { Node, Edge, Connection, NodeChange, EdgeChange } from 'reactflow';
+import { nodeTypes } from './nodes';
+import { NODE_DEFINITIONS, CATEGORY_COLORS, NodeCategory } from '../../types/nodes';
+import type { NodeData } from '../../types/nodes';
 import 'reactflow/dist/style.css';
 import './NodeEditor.css';
 
-const initialNodes: Node[] = [
+// Create initial nodes with proper MVP node types
+const initialNodes: Node<NodeData>[] = [
   {
     id: '1',
-    type: 'default',
-    position: { x: 250, y: 100 },
-    data: { label: 'Start Node' },
+    type: 'Start',
+    position: { x: 100, y: 100 },
+    data: {
+      label: 'Start',
+      nodeType: 'Start',
+      category: NodeCategory.CONTROL,
+      parameters: {},
+      definition: NODE_DEFINITIONS.Start,
+    },
   },
   {
     id: '2',
-    type: 'default',
-    position: { x: 250, y: 250 },
-    data: { label: 'End Node' },
+    type: 'LinearMove',
+    position: { x: 100, y: 250 },
+    data: {
+      label: 'Linear Move',
+      nodeType: 'LinearMove',
+      category: NodeCategory.MOVEMENT,
+      parameters: { x: 10, y: 10, z: 0.2 },
+      definition: NODE_DEFINITIONS.LinearMove,
+    },
+  },
+  {
+    id: '3',
+    type: 'End',
+    position: { x: 100, y: 400 },
+    data: {
+      label: 'End',
+      nodeType: 'End',
+      category: NodeCategory.CONTROL,
+      parameters: {},
+      definition: NODE_DEFINITIONS.End,
+    },
   },
 ];
 
 const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', animated: true },
+  { id: 'e1-2', source: '1', sourceHandle: 'out', target: '2', targetHandle: 'in', animated: true },
+  { id: 'e2-3', source: '2', sourceHandle: 'out', target: '3', targetHandle: 'in', animated: true },
 ];
 
 export function NodeEditor() {
@@ -63,6 +92,7 @@ export function NodeEditor() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
@@ -85,14 +115,8 @@ export function NodeEditor() {
         />
         <MiniMap
           nodeColor={(node) => {
-            switch (node.type) {
-              case 'start':
-                return '#4CAF50';
-              case 'end':
-                return '#F44336';
-              default:
-                return '#9E9E9E';
-            }
+            const nodeData = node.data as NodeData;
+            return nodeData?.definition?.color || CATEGORY_COLORS[nodeData?.category] || '#9E9E9E';
           }}
           nodeStrokeWidth={3}
           zoomable
