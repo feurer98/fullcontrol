@@ -1176,46 +1176,67 @@ export const BaseNode = memo(({ data, selected }: BaseNodeProps) => {
 
 ---
 
-#### Task 4.3: Node Palette & Drag-Drop
+#### Task 4.3: Node Palette & Drag-Drop ✅ COMPLETED
 **Ziel**: Seitenleiste mit verfügbaren Nodes
 
 **Deliverable**:
-- [ ] Node-Palette nach Kategorien
-- [ ] Drag & Drop auf Canvas
-- [ ] Suchfunktion
+- [x] Node-Palette nach Kategorien
+- [x] Drag & Drop auf Canvas
+- [x] Suchfunktion
 
 **Abhängigkeiten**: Task 4.2
 
 **Definition of Done**:
-- [ ] Nodes können per Drag & Drop hinzugefügt werden
-- [ ] Kategorien klappbar
-- [ ] Suche findet Nodes
+- [x] Nodes können per Drag & Drop hinzugefügt werden
+- [x] Kategorien klappbar
+- [x] Suche findet Nodes
 
-**Technische Schritte**:
-1. Implementiere Palette:
-   ```tsx
-   export function NodePalette() {
-     const categories = useNodeCategories();
+**Implementierung**:
 
-     return (
-       <aside className="node-palette">
-         <SearchInput onChange={setFilter} />
-         {categories.map(cat => (
-           <CategorySection key={cat.id} category={cat}>
-             {cat.nodes.map(node => (
-               <DraggableNode
-                 key={node.id}
-                 node={node}
-                 onDragStart={(e) => onDragStart(e, node.type)}
-               />
-             ))}
-           </CategorySection>
-         ))}
-       </aside>
-     );
-   }
-   ```
-2. Implementiere onDrop Handler
+**1. NodePalette Component** (`NodePalette.tsx` - ~180 LOC)
+- Kategorisierung: Nodes gruppiert nach 5 Kategorien (Control, Movement, Temperature, Hardware, Utility)
+- Klappbare Kategorien mit Expand/Collapse Icons
+- Suchfunktion: Filtert Nodes nach Name, Description und ID
+- Search Clear Button
+- Empty State bei keinen Suchergebnissen
+- Drag & Drop: Nodes sind draggable mit DataTransfer API
+- Material Icons Integration
+- Node Count Badge pro Kategorie
+
+**2. Drag & Drop Integration** (`NodeEditor.tsx` Updates)
+- ReactFlowProvider Wrapper für useReactFlow Hook
+- `onDragOver` Handler: allowiert Drop mit `event.preventDefault()`
+- `onDrop` Handler:
+  - Liest nodeType aus DataTransfer
+  - Konvertiert Screen-Koordinaten zu Flow-Koordinaten mit `screenToFlowPosition`
+  - Erstellt neuen Node mit auto-incrementing ID
+  - Initialisiert Parameter mit Default Values
+  - Fügt Node zum Canvas hinzu
+- Flex Layout: Palette links (280px), ReactFlow rechts (flex: 1)
+
+**3. Styling** (`NodePalette.css` - ~240 LOC)
+- Dark Theme konsistent mit NodeEditor
+- Category Headers mit Left Border Color Coding
+- Draggable Nodes mit Grab Cursor
+- Hover Effects: translateX(4px) Animation
+- Search Input mit Icon und Clear Button
+- Scrollable Categories mit Custom Scrollbar
+- Empty State Styling
+
+**4. Tests** (`NodePalette.test.tsx` - 6 Tests)
+- Component Export Validation
+- CATEGORY_COLORS Definition Check
+- Color Code Validation (HEX Format)
+- Node Definitions Availability
+- Category-Color Mapping Validation
+- Required Display Properties Check
+
+**Ergebnis**:
+- ✅ Alle 25 Frontend-Tests bestehen
+- ✅ Build erfolgreich: 351.54 kB
+- ✅ Drag & Drop funktioniert
+- ✅ Kategorien klappbar
+- ✅ Suche funktioniert mit Real-Time Filtering
 
 **Risiken**: Keine
 
